@@ -8,6 +8,10 @@ from typing import Dict, Any
 import ttkbootstrap
 from ttkbootstrap.style import Style
 from ttkbootstrap.constants import *
+import shutil
+from datetime import datetime
+
+LOG_FILE = "movimentacao_obsoletos.json"
 
 
 # Caminho do arquivo JSON
@@ -225,7 +229,7 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
         arquivos_processados = []
         for arquivo in arquivos_selecionados:
             nome_arquivo = os.path.basename(arquivo)
-            dados_extraidos = extrair_dados_arquivo(nome_arquivo)
+            dados_extraidos = extrair_dados_arquivo(nome_arquivo, arquivo)
             arquivos_processados.append(dados_extraidos)
 
         if not arquivos_processados:
@@ -276,7 +280,7 @@ def identificar_numero_arquivo(partes):
     return ""
     
 # Função revisada para extrair dados do nome do arquivo
-def extrair_dados_arquivo(nome_arquivo):
+def extrair_dados_arquivo(nome_arquivo, caminho_completo):
     nome_base, extensão = os.path.splitext(nome_arquivo)
     partes = nome_base.split('-')
 
@@ -285,6 +289,7 @@ def extrair_dados_arquivo(nome_arquivo):
             "Status": partes[0] if len(partes) > 0 else "",
             "Nome do Arquivo": nome_arquivo,
             "Extensão": extensão.strip('-'),
+            "Caminho Completo": caminho_completo if caminho_completo else "",  # <-- Garantir que sempre existe
 
             "Nº do Arquivo": identificar_numero_arquivo(partes),  # Chama a nova função
             
@@ -406,7 +411,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
     # Frame para botões
     frm_botoes = tk.Frame(conteudo_principal)
     frm_botoes.pack(side=tk.TOP, anchor="ne", pady=10, padx=10)
-    ttk.Button(frm_botoes, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura, bootstyle="info").pack(side=tk.LEFT, padx=5)
+    ttk.Button(frm_botoes, text="Analisar Nomenclatura", command=fazer_analise_nomenclatura, bootstyle="info").pack(side=tk.LEFT, padx=5)
 
     cols = ["Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo", "Fase", "Tipo", "Revisão", 
             "Modificação", "Modificado por", "Entrega"]
@@ -432,7 +437,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
         arquivos = filedialog.askopenfilenames(title="Selecione arquivos")
         for arquivo in arquivos:
             nome_arquivo = os.path.basename(arquivo)
-            dados_extraidos = extrair_dados_arquivo(nome_arquivo)
+            dados_extraidos = extrair_dados_arquivo(nome_arquivo, arquivo)
             tabela.insert("", tk.END, values=(
                 dados_extraidos["Status"], dados_extraidos["Nome do Arquivo"], dados_extraidos["Extensão"], 
                 dados_extraidos["Nº do Arquivo"], dados_extraidos["Fase"], dados_extraidos["Tipo"], 
@@ -579,8 +584,56 @@ def identificar_revisoes(lista_arquivos):
 
 #Tela que exibe os arquivos revisados e obsoletos antes da confirmação final.
 
+def identificar_e_mover_obsoletos(lista_arquivos):
+            movimentacoes = []
+            for arq in lista_arquivos:
+                nome_base, _ = os.path.splitext(arq["Nome do Arquivo"])
+                tokens = nome_base.split("-")
+                for arq in lista_arquivos:
+                    if "Caminho Completo" not in arq or not arq["Caminho Completo"]:
+                        print(f"Aviso: Arquivo {arq['Nome do Arquivo']} sem caminho completo!")
+
+
+                if len(tokens) < 2:
+                    continue  # Ignorar arquivos com nome inválido
+
+                identificador = "-".join(tokens[:-1])  # Remove apenas a revisão
+                revisao = tokens[-1] if tokens[-1].startswith("R") and tokens[-1][1:].isdigit() else "R00"
+
+                disciplina_path = os.path.dirname(arq["Caminho Completo"])
+                obsoletos_path = os.path.join(disciplina_path, "Obsoletos")
+                data_atual = datetime.now().strftime("%Y-%m-%d")
+                obsoletos_data_path = os.path.join(obsoletos_path, f"Obsoletos {data_atual}")
+
+                if not os.path.exists(obsoletos_data_path):
+                    os.makedirs(obsoletos_data_path)
+
+                destino = os.path.join(obsoletos_data_path, arq["Nome do Arquivo"].replace(".pdf", "_OBSOLETO.pdf"))
+
+                if arq["Caminho Completo"] and os.path.exists(arq["Caminho Completo"]):
+                    shutil.move(arq["Caminho Completo"], destino)
+                else:
+                    print(f"Arquivo não encontrado: {arq['Caminho Completo']}")
+
+                movimentacoes.append({
+                    "arquivo": arq["Nome do Arquivo"],
+                    "movido_para": destino,
+                    "data": data_atual
+                })
+
+            if movimentacoes:
+                with open(LOG_FILE, "w") as f:
+                    json.dump(movimentacoes, f, indent=4)
+
 def tela_verificacao_revisao(lista_arquivos):
     arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
+
+    # Garante que todos os arquivos têm a chave 'Caminho Completo'
+    for arquivo in arquivos_obsoletos:
+        if "Caminho Completo" not in arquivo:
+            arquivo["Caminho Completo"] = ""
+
+    identificar_e_mover_obsoletos(arquivos_obsoletos)
 
     janela = tk.Tk()
     janela.title("Verificação de Revisão")
@@ -614,13 +667,14 @@ def tela_verificacao_revisao(lista_arquivos):
 
     for arq in arquivos_obsoletos:
         tree_obsoletos.insert("", tk.END, values=(arq["Nome do Arquivo"], arq["Revisão"]))
-
+        
     def voltar():
         janela.destroy()
         tela_analise_nomenclatura(lista_arquivos)
 
     def confirmar():
-        messagebox.showinfo("Confirmação", "Arquivos revisados e obsoletos identificados com sucesso.")
+        identificar_e_mover_obsoletos(arquivos_obsoletos)
+        messagebox.showinfo("Confirmação", "Arquivos revisados e obsoletos identificados e movidos com sucesso.")
         janela.destroy()
 
     # Botões de ação
