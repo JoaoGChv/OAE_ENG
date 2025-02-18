@@ -8,6 +8,7 @@ from typing import Dict, Any
 import ttkbootstrap
 from ttkbootstrap.style import Style
 from ttkbootstrap.constants import *
+import shutil
 
 
 # Caminho do arquivo JSON
@@ -84,6 +85,43 @@ def atualizar_historico(lista_arquivos, caminho_json=HISTORICO_JSON):
         json.dump(historico, f, indent=4, ensure_ascii=False)
     
     return historico
+
+def criar_pastas_organizacao():
+    """
+    Cria pastas 'Revisados' e 'Obsoletos' dentro do diretório de destino.
+    """
+    base_dir = r"C:\Users\PROJETOS\Downloads\OAE-467 - PETER-KD-ENG"
+
+    pasta_revisados = os.path.join(base_dir, "Revisados")
+    if not os.path.exists(pasta_revisados):
+        os.makedirs(pasta_revisados)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    pasta_obsoletos = os.path.join(base_dir, f"Obsoletos_{timestamp}")
+    if not os.path.exists(pasta_obsoletos):
+        os.makedirs(pasta_obsoletos)
+
+    return pasta_revisados, pasta_obsoletos
+
+
+def mover_arquivos(lista_arquivos, destino):
+    for arquivo in lista_arquivos:
+        nome_arquivo = arquivo["Nome do Arquivo"]
+        caminho = arquivo.get("Caminho", "")
+
+        if caminho and os.path.exists(caminho):
+            shutil.move(caminho, os.path.join(destino, nome_arquivo))
+
+def mover_obsoletos(lista_obsoletos, destino):
+    """Move arquivos obsoletos para a pasta especificada, adicionando '_OBSOLETO'."""
+    for (_, arquivo, _, caminho, _) in lista_obsoletos:
+        origem = caminho
+        destino_arquivo = os.path.join(destino, arquivo.replace(".dwg", "_OBSOLETO.dwg"))
+
+        if os.path.exists(origem):
+            shutil.move(origem, destino_arquivo)
+            print(f"Arquivo obsoleto movido: {origem} → {destino_arquivo}")
+
 
 # Interface inicial para seleção de projetos
 def janela_selecao_projeto():
@@ -550,14 +588,17 @@ Identifica a revisão mais recente para cada conjunto de arquivos com o mesmo no
 
 def identificar_revisoes(lista_arquivos):
     grupos = {}
-    
+
+    # Filtrar apenas arquivos analisados pelo usuário
+    arquivos_selecionados = {arq["Nome do Arquivo"] for arq in lista_arquivos}
+
     for arq in lista_arquivos:
         nome_base, _ = os.path.splitext(arq["Nome do Arquivo"])
         tokens = nome_base.split("-")
         if len(tokens) < 2:
-            continue  # Ignorar arquivos com nome inválido
-        
-        identificador = "-".join(tokens[:-1])  # Ignora apenas o campo da revisão
+            continue
+
+        identificador = "-".join(tokens[:-1])
         revisao = tokens[-1] if tokens[-1].startswith("R") and tokens[-1][1:].isdigit() else "R00"
 
         if identificador not in grupos:
@@ -569,35 +610,18 @@ def identificar_revisoes(lista_arquivos):
     arquivos_obsoletos = []
 
     for identificador, arquivos in grupos.items():
-        arquivos.sort(key=lambda x: int(x[0][1:]))  # Ordena pela numeração da revisão (exemplo: "R01" -> 1)
+        arquivos.sort(key=lambda x: int(x[0][1:]))  # Ordena pela revisão numérica
         revisao_mais_recente = arquivos[-1][1]
-        
-        arquivos_revisados.append(revisao_mais_recente)
-        arquivos_obsoletos.extend([arq[1] for arq in arquivos[:-1]])
+
+        if revisao_mais_recente["Nome do Arquivo"] in arquivos_selecionados:
+            arquivos_revisados.append(revisao_mais_recente)
+            arquivos_obsoletos.extend(
+                [arq[1] for arq in arquivos[:-1] if arq[1]["Nome do Arquivo"] in arquivos_selecionados]
+            )
 
     return arquivos_revisados, arquivos_obsoletos
 
 #Tela que exibe os arquivos revisados e obsoletos antes da confirmação final.
-def criar_pasta(caminho_base):
-    numero_atual = 1
-    while True:
-        data_hora = datetime.now().strftime("%d-%m-%Y - %H-%M")  # Formato desejado
-        nome_pasta = os.path.join(caminho_base, f"Obsoletos {data_hora}")
-        
-        try:
-            os.makedirs(nome_pasta)
-            print(f"Pasta '{nome_pasta}' criada com sucesso.")
-            break
-        except FileExistsError:
-            numero_atual += 1  # Embora improvável, adicionamos um número se o nome já existir
-        except Exception as e:
-            print(f"Erro ao criar pasta '{nome_pasta}': {e}")
-            break
-
-caminho_base = r"C:\Users\PROJETOS\Downloads\OAE-467 - PETER-KD-ENG\3 Desenvolvimento\SCO\1.ENTREGAS"
-
-criar_pasta(caminho_base)
-
 def tela_verificacao_revisao(lista_arquivos):
     arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
 
@@ -639,9 +663,35 @@ def tela_verificacao_revisao(lista_arquivos):
         tela_analise_nomenclatura(lista_arquivos)
 
     def confirmar():
-        messagebox.showinfo("Confirmação", "Arquivos revisados e obsoletos identificados com sucesso.")
-        janela.destroy()
-        
+        if not messagebox.askyesno("Confirmação Final", "Confirma que estes arquivos estão corretos?"):
+            return  # Agora não destrói a janela antes de processar
+
+        if not messagebox.askyesno("Entrega Oficial", "Essa é uma entrega oficial?"):
+            return  # Evita destruir a janela antes da execução
+
+        try:
+            pos_processamento(lista_arquivos)  # Executa antes de fechar a janela
+            messagebox.showinfo("Sucesso", "Arquivos revisados e obsoletos movidos com sucesso.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Ocorreu um erro: {e}")
+
+        janela.destroy()  # Agora destrói a janela apenas **depois** da execução
+
+
+    def pos_processamento(lista_arquivos):
+        print("\nDEBUG: Conteúdo de lista_arquivos antes do erro:")
+        for item in lista_arquivos:
+            print(type(item), item)  # Exibir a estrutura de cada item da lista
+
+        """Processa a movimentação de arquivos revisados e obsoletos."""
+        pasta_revisados, pasta_obsoletos = criar_pastas_organizacao()
+
+        arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
+
+        mover_arquivos(arquivos_revisados, pasta_revisados)
+        mover_obsoletos(arquivos_obsoletos, pasta_obsoletos)
+
+        print("Arquivos organizados com sucesso!")
 
     # Botões de ação
     btn_frame = tk.Frame(janela)
