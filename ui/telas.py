@@ -8,7 +8,6 @@ from typing import Dict, Any
 import ttkbootstrap
 from ttkbootstrap.style import Style
 from ttkbootstrap.constants import *
-import shutil
 
 
 # Caminho do arquivo JSON
@@ -86,41 +85,98 @@ def atualizar_historico(lista_arquivos, caminho_json=HISTORICO_JSON):
     
     return historico
 
+##############################################
+# Funções de Movimentação de Arquivos
+##############################################
 def criar_pastas_organizacao():
     """
-    Cria pastas 'Revisados' e 'Obsoletos' dentro do diretório de destino.
+    Cria as pastas para arquivos revisados e obsoletos.
     """
     base_dir = r"C:\Users\PROJETOS\Downloads\OAE-467 - PETER-KD-ENG"
-
     pasta_revisados = os.path.join(base_dir, "Revisados")
     if not os.path.exists(pasta_revisados):
         os.makedirs(pasta_revisados)
-
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     pasta_obsoletos = os.path.join(base_dir, f"Obsoletos_{timestamp}")
     if not os.path.exists(pasta_obsoletos):
         os.makedirs(pasta_obsoletos)
-
     return pasta_revisados, pasta_obsoletos
 
-
 def mover_arquivos(lista_arquivos, destino):
-    for arquivo in lista_arquivos:
-        nome_arquivo = arquivo["Nome do Arquivo"]
-        caminho = arquivo.get("Caminho", "")
+    import shutil
+    print("[DEBUG] mover_arquivos() chamado.")
+    print(f"[DEBUG] Pasta de destino: {destino}")
+    print(f"[DEBUG] Quantidade de arquivos para mover: {len(lista_arquivos)}")
 
-        if caminho and os.path.exists(caminho):
-            shutil.move(caminho, os.path.join(destino, nome_arquivo))
+    for idx, arq in enumerate(lista_arquivos):
+        print(f"[DEBUG] Analisando arquivo {idx+1}/{len(lista_arquivos)}: {arq}")
+        
+        origem = arq.get("caminho_completo")  # Recupera usando a chave correta
+        nome_arquivo = arq.get("Nome do Arquivo")
+
+        if not origem:
+            print(f"[DEBUG] -> 'caminho_completo' não encontrado no dicionário. Pulando.")
+            continue
+        
+        if not os.path.exists(origem):
+            print(f"[DEBUG] -> O arquivo '{origem}' não existe. Pulando.")
+            continue
+
+        destino_arquivo = os.path.join(destino, nome_arquivo)
+        print(f"[DEBUG] -> Movendo de '{origem}' para '{destino_arquivo}'...")
+        try:
+            shutil.move(origem, destino_arquivo)
+            print("[DEBUG] -> Movimento bem-sucedido!")
+        except Exception as e:
+            print(f"[ERRO] -> Falha ao mover '{origem}' para '{destino_arquivo}': {e}")
 
 def mover_obsoletos(lista_obsoletos, destino):
-    """Move arquivos obsoletos para a pasta especificada, adicionando '_OBSOLETO'."""
-    for (_, arquivo, _, caminho, _) in lista_obsoletos:
-        origem = caminho
-        destino_arquivo = os.path.join(destino, arquivo.replace(".dwg", "_OBSOLETO.dwg"))
+    import shutil
+    print("[DEBUG] mover_obsoletos() chamado.")
+    print(f"[DEBUG] Pasta de destino: {destino}")
+    print(f"[DEBUG] Quantidade de arquivos obsoletos: {len(lista_obsoletos)}")
 
-        if os.path.exists(origem):
+    for idx, arq in enumerate(lista_obsoletos):
+        print(f"[DEBUG] Analisando arquivo obsoleto {idx+1}/{len(lista_obsoletos)}: {arq}")
+
+        origem = arq.get("caminho_completo")  # Usar a mesma chave
+        nome_arquivo = arq.get("Nome do Arquivo")
+
+        if not origem:
+            print(f"[DEBUG] -> 'caminho_completo' não encontrado no dicionário. Pulando.")
+            continue
+        
+        if not os.path.exists(origem):
+            print(f"[DEBUG] -> O arquivo '{origem}' não existe. Pulando.")
+            continue
+
+        base, ext = os.path.splitext(nome_arquivo)
+        destino_arquivo = os.path.join(destino, base + "_OBSOLETO" + ext)
+        print(f"[DEBUG] -> Movendo obsoleto de '{origem}' para '{destino_arquivo}'...")
+        try:
             shutil.move(origem, destino_arquivo)
-            print(f"Arquivo obsoleto movido: {origem} → {destino_arquivo}")
+            print("[DEBUG] -> Movimento bem-sucedido!")
+        except Exception as e:
+            print(f"[ERRO] -> Falha ao mover '{origem}' para '{destino_arquivo}': {e}")
+
+def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_novos, arquivos_revisados, arquivos_alterados, obsoletos):
+    print("[DEBUG] pos_processamento() chamado.")
+    print(f"[DEBUG] primeira_entrega={primeira_entrega}, diretorio={diretorio}")
+    print(f"[DEBUG] arquivos_novos={len(arquivos_novos)}, arquivos_revisados={len(arquivos_revisados)}, "
+          f"arquivos_alterados={len(arquivos_alterados)}, obsoletos={len(obsoletos)}")
+
+    pasta_revisados, pasta_obsoletos = criar_pastas_organizacao()
+    if pasta_revisados is None or pasta_obsoletos is None:
+        messagebox.showerror("Erro", "Não foi possível criar pastas para organizar os arquivos. Verifique as permissões.")
+        return
+
+    # Chamadas efetivas de movimentação:
+    mover_arquivos(arquivos_revisados, pasta_revisados)
+    mover_obsoletos(obsoletos, pasta_obsoletos)
+
+    messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
+    import sys
+    sys.exit(0)
 
 
 # Interface inicial para seleção de projetos
@@ -264,6 +320,7 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
         for arquivo in arquivos_selecionados:
             nome_arquivo = os.path.basename(arquivo)
             dados_extraidos = extrair_dados_arquivo(nome_arquivo)
+            dados_extraidos["caminho_completo"] = arquivo  # Adiciona o caminho completo
             arquivos_processados.append(dados_extraidos)
 
         if not arquivos_processados:
@@ -471,6 +528,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
         for arquivo in arquivos:
             nome_arquivo = os.path.basename(arquivo)
             dados_extraidos = extrair_dados_arquivo(nome_arquivo)
+            dados_extraidos["caminho_completo"] = arquivo
             tabela.insert("", tk.END, values=(
                 dados_extraidos["Status"], dados_extraidos["Nome do Arquivo"], dados_extraidos["Extensão"], 
                 dados_extraidos["Nº do Arquivo"], dados_extraidos["Fase"], dados_extraidos["Tipo"], 
@@ -558,7 +616,6 @@ def tela_analise_nomenclatura(lista_arquivos):
     ttk.Button(frm_botoes, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
     ttk.Button(frm_botoes, text="Avançar", command=avancar, bootstyle="success").pack(side=tk.RIGHT, padx=5)
 
-
     tree = ttk.Treeview(janela, show="headings", height=20)
     tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -585,20 +642,16 @@ def tela_analise_nomenclatura(lista_arquivos):
 Identifica a revisão mais recente para cada conjunto de arquivos com o mesmo nome base
 (excluindo a revisão). Marca os arquivos antigos como "Obsoletos" e os mais recentes como "Revisados".
 '''
-
 def identificar_revisoes(lista_arquivos):
     grupos = {}
-
-    # Filtrar apenas arquivos analisados pelo usuário
-    arquivos_selecionados = {arq["Nome do Arquivo"] for arq in lista_arquivos}
-
+    
     for arq in lista_arquivos:
         nome_base, _ = os.path.splitext(arq["Nome do Arquivo"])
         tokens = nome_base.split("-")
         if len(tokens) < 2:
-            continue
-
-        identificador = "-".join(tokens[:-1])
+            continue  # Ignorar arquivos com nome inválido
+        
+        identificador = "-".join(tokens[:-1])  # Ignora apenas o campo da revisão
         revisao = tokens[-1] if tokens[-1].startswith("R") and tokens[-1][1:].isdigit() else "R00"
 
         if identificador not in grupos:
@@ -610,18 +663,14 @@ def identificar_revisoes(lista_arquivos):
     arquivos_obsoletos = []
 
     for identificador, arquivos in grupos.items():
-        arquivos.sort(key=lambda x: int(x[0][1:]))  # Ordena pela revisão numérica
+        arquivos.sort(key=lambda x: int(x[0][1:]))  # Ordena pela numeração da revisão (exemplo: "R01" -> 1)
         revisao_mais_recente = arquivos[-1][1]
-
-        if revisao_mais_recente["Nome do Arquivo"] in arquivos_selecionados:
-            arquivos_revisados.append(revisao_mais_recente)
-            arquivos_obsoletos.extend(
-                [arq[1] for arq in arquivos[:-1] if arq[1]["Nome do Arquivo"] in arquivos_selecionados]
-            )
+        
+        arquivos_revisados.append(revisao_mais_recente)
+        arquivos_obsoletos.extend([arq[1] for arq in arquivos[:-1]])
 
     return arquivos_revisados, arquivos_obsoletos
 
-#Tela que exibe os arquivos revisados e obsoletos antes da confirmação final.
 def tela_verificacao_revisao(lista_arquivos):
     arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
 
@@ -663,35 +712,16 @@ def tela_verificacao_revisao(lista_arquivos):
         tela_analise_nomenclatura(lista_arquivos)
 
     def confirmar():
-        if not messagebox.askyesno("Confirmação Final", "Confirma que estes arquivos estão corretos?"):
-            return  # Agora não destrói a janela antes de processar
-
-        if not messagebox.askyesno("Entrega Oficial", "Essa é uma entrega oficial?"):
-            return  # Evita destruir a janela antes da execução
-
-        try:
-            pos_processamento(lista_arquivos)  # Executa antes de fechar a janela
-            messagebox.showinfo("Sucesso", "Arquivos revisados e obsoletos movidos com sucesso.")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Ocorreu um erro: {e}")
-
-        janela.destroy()  # Agora destrói a janela apenas **depois** da execução
-
-
-    def pos_processamento(lista_arquivos):
-        print("\nDEBUG: Conteúdo de lista_arquivos antes do erro:")
-        for item in lista_arquivos:
-            print(type(item), item)  # Exibir a estrutura de cada item da lista
-
-        """Processa a movimentação de arquivos revisados e obsoletos."""
+        messagebox.showinfo("Confirmação", "Arquivos revisados e obsoletos identificados com sucesso.")
+        # Aqui você de fato chama as funções de movimentação
+        # 1) Criar as pastas
         pasta_revisados, pasta_obsoletos = criar_pastas_organizacao()
-
-        arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
-
+        # 2) Mover revisados
         mover_arquivos(arquivos_revisados, pasta_revisados)
+        # 3) Mover obsoletos
         mover_obsoletos(arquivos_obsoletos, pasta_obsoletos)
-
-        print("Arquivos organizados com sucesso!")
+        janela.destroy()
+        
 
     # Botões de ação
     btn_frame = tk.Frame(janela)
