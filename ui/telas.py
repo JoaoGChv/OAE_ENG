@@ -10,15 +10,10 @@ from ttkbootstrap.constants import *
 import shutil
 import sys
 
-# Caminho do arquivo JSON
 JSON_FILE_PATH = "dados_projetos.json"
-
-# Caminho para o arquivo JSON
 PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
-
-# Caminho para o JSON com padrões de nomenclatura
 PADROES_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\ui\padrões.json"
 
 def carregar_padroes_nomenclatura():
@@ -27,7 +22,7 @@ def carregar_padroes_nomenclatura():
             return json.load(f).get("padroes", [])
     else:
         return []
-    
+
 def carregar_projetos():
     if not os.path.exists(PROJETOS_JSON):
         messagebox.showerror("Erro", f"Arquivo não encontrado: {PROJETOS_JSON}")
@@ -82,63 +77,42 @@ def criar_pastas_organizacao():
     return pasta_revisados, pasta_obsoletos
 
 def mover_arquivos(lista_arquivos, destino):
-    print("[DEBUG] mover_arquivos() chamado.")
-    print(f"[DEBUG] Pasta de destino: {destino}")
-    print(f"[DEBUG] Quantidade de arquivos para mover: {len(lista_arquivos)}")
     for idx, arq in enumerate(lista_arquivos):
-        print(f"[DEBUG] Analisando arquivo {idx+1}/{len(lista_arquivos)}: {arq}")
         origem = arq.get("caminho")
         nome_arquivo = arq.get("Nome do Arquivo")
         if not origem:
-            print(f"[DEBUG] -> 'caminho' não encontrado no dicionário para o arquivo {nome_arquivo}. Pulando.")
             messagebox.showerror("Erro", f"O caminho para o arquivo '{nome_arquivo}' não foi encontrado.")
             continue
         if not os.path.exists(origem):
-            print(f"[DEBUG] -> O arquivo '{origem}' não existe. Pulando.")
             messagebox.showerror("Erro", f"O arquivo '{nome_arquivo}' com caminho '{origem}' não existe ou não é acessível.")
             continue
         destino_arquivo = os.path.join(destino, nome_arquivo)
-        print(f"[DEBUG] -> Movendo de '{origem}' para '{destino_arquivo}'...")
         try:
             shutil.move(origem, destino_arquivo)
-            print("[DEBUG] -> Movimento bem-sucedido!")
         except Exception as e:
-            print(f"[ERRO] -> Falha ao mover '{origem}' para '{destino_arquivo}': {e}")
             messagebox.showerror("Erro", f"Falha ao mover o arquivo '{nome_arquivo}' com caminho '{origem}': {e}")
 
 def mover_obsoletos(lista_obsoletos, destino):
-    print("[DEBUG] mover_obsoletos() chamado.")
-    print(f"[DEBUG] Pasta de destino: {destino}")
-    print(f"[DEBUG] Quantidade de arquivos obsoletos: {len(lista_obsoletos)}")
     for idx, arq in enumerate(lista_obsoletos):
-        print(f"[DEBUG] Analisando arquivo obsoleto {idx+1}/{len(lista_obsoletos)}: {arq}")
         origem = arq.get("caminho")
         nome_arquivo = arq.get("Nome do Arquivo")
         if not origem:
-            print(f"[DEBUG] -> 'caminho' não encontrado no dicionário para o arquivo {nome_arquivo}. Pulando.")
             messagebox.showerror("Erro", f"O caminho para o arquivo '{nome_arquivo}' não foi encontrado.")
             continue
         if not os.path.exists(origem):
-            print(f"[DEBUG] -> O arquivo '{origem}' não existe. Pulando.")
             messagebox.showerror("Erro", f"O arquivo '{nome_arquivo}' com caminho '{origem}' não existe ou não é acessível.")
             continue
         base, ext = os.path.splitext(nome_arquivo)
         destino_arquivo = os.path.join(destino, base + "_OBSOLETO" + ext)
-        print(f"[DEBUG] -> Movendo obsoleto de '{origem}' para '{destino_arquivo}'...")
         try:
             shutil.move(origem, destino_arquivo)
-            print("[DEBUG] -> Movimento bem-sucedido!")
         except Exception as e:
-            print(f"[ERRO] -> Falha ao mover '{origem}' para '{destino_arquivo}': {e}")
             messagebox.showerror("Erro", f"Falha ao mover o arquivo obsoleto '{nome_arquivo}' com caminho '{origem}': {e}")
 
 def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_novos, arquivos_revisados, arquivos_alterados, obsoletos):
-    print("[DEBUG] pos_processamento() chamado.")
-    print(f"[DEBUG] primeira_entrega={primeira_entrega}, diretorio={diretorio}")
-    print(f"[DEBUG] arquivos_novos={len(arquivos_novos)}, arquivos_revisados={len(arquivos_revisados)}, arquivos_alterados={len(arquivos_alterados)}, obsoletos={len(obsoletos)}")
     pasta_revisados, pasta_obsoletos = criar_pastas_organizacao()
     if pasta_revisados is None or pasta_obsoletos is None:
-        messagebox.showerror("Erro", "Não foi possível criar pastas para organizar os arquivos. Verifique as permissões.")
+        messagebox.showerror("Erro", "Não foi possível criar pastas para organizar os arquivos.")
         return
     mover_arquivos(arquivos_revisados, pasta_revisados)
     mover_obsoletos(obsoletos, pasta_obsoletos)
@@ -192,7 +166,7 @@ def janela_selecao_projeto():
         tree.insert("", tk.END, values=(numero, caminho))
     btn_frame = tk.Frame(frame)
     btn_frame.pack(pady=5)
-    ttk.Button(btn_frame, text="Confirmar", command=confirmar, bootstyle="sucess").pack(side=tk.LEFT, padx=5)
+    ttk.Button(btn_frame, text="Confirmar", command=confirmar, bootstyle="success").pack(side=tk.LEFT, padx=5)
     ttk.Button(btn_frame, text="Cancelar", command=root.destroy, bootstyle="danger").pack(side=tk.LEFT, padx=5)
     root.mainloop()
     return sel["numero"], sel["caminho"]
@@ -273,15 +247,15 @@ def identificar_numero_arquivo(partes):
         if any(char.isdigit() for char in parte) and not parte.isalpha() and len(parte) <= 6:
             return parte
     return ""
-    
+
 def extrair_dados_arquivo(nome_arquivo):
-    nome_base, extensão = os.path.splitext(nome_arquivo)
+    nome_base, extensao = os.path.splitext(nome_arquivo)
     partes = nome_base.split('-')
     try:
         dados = {
             "Status": partes[0] if len(partes) > 0 else "",
             "Nome do Arquivo": nome_arquivo,
-            "Extensão": extensão.strip('-'),
+            "Extensão": extensao.strip('-'),
             "Nº do Arquivo": identificar_numero_arquivo(partes),
             "Fase": partes[5] if len(partes) > 5 else "",
             "Tipo": partes[6] if len(partes) > 6 else "",
@@ -414,70 +388,6 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
     ttk.Button(btn_frame, text="Sair", command=janela.destroy, bootstyle="danger").pack(side=tk.RIGHT, padx=5)
     janela.mainloop()
 
-def tela_analise_nomenclatura(lista_arquivos):
-    padroes_nomenclatura = carregar_padroes_nomenclatura()
-    if not padroes_nomenclatura:
-        messagebox.showerror("Erro", "Nenhum padrão de nomenclatura carregado.")
-        return
-    def verificar_tokens(tokens):
-        for padrao in padroes_nomenclatura:
-            if len(tokens) != len(padrao):
-                continue
-            tags = ["ok" if tokens[i] == padrao[i] else "mismatch" for i in range(len(padrao))]
-            if "mismatch" not in tags:
-                return tags, padrao
-        return ["mismatch"] * len(tokens), None
-    def mostrar_nomenclatura_padrao():
-        win = tk.Toplevel(janela)
-        win.title("Padrões de Nomenclatura")
-        win.geometry("800x300")
-        lbl_padrao = tk.Label(win, text="Padrões de Nomenclatura:")
-        lbl_padrao.pack(pady=10)
-        frm_padrao = tk.Frame(win)
-        frm_padrao.pack(fill=tk.BOTH, expand=True)
-        for padrao in padroes_nomenclatura:
-            lbl_linha = tk.Label(frm_padrao, text=" - ".join(padrao), relief=tk.RIDGE, padx=5, pady=5)
-            lbl_linha.pack(anchor="w", padx=5, pady=2)
-    def avancar():
-        for iid in tree.get_children():
-            tags = tree.item(iid, "tags")
-            if "mismatch" in tags:
-                messagebox.showerror("Erro", "Corrija os erros antes de avançar.")
-                return
-        janela.destroy()
-        tela_verificacao_revisao(lista_arquivos)
-    def voltar():
-        janela.destroy()
-        exibir_interface_tabela("467", lista_arquivos)
-    janela = tk.Tk()
-    janela.title("Verificação de Nomenclatura")
-    janela.geometry("1200x600")
-    lbl_instrucao = tk.Label(janela, text="Confira a nomenclatura (campos e separadores). Caso haja erros, corrija antes de avançar.", font=("Helvetica", 12))
-    lbl_instrucao.pack(pady=10)
-    frm_botoes = tk.Frame(janela)
-    frm_botoes.pack(pady=10)
-    ttk.Button(frm_botoes, text="Mostrar Padrões", command=mostrar_nomenclatura_padrao, bootstyle="secondary").pack(side=tk.LEFT, padx=5)
-    ttk.Button(frm_botoes, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
-    ttk.Button(frm_botoes, text="Avançar", command=avancar, bootstyle="success").pack(side=tk.RIGHT, padx=5)
-    tree = ttk.Treeview(janela, show="headings", height=20)
-    tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    colunas = [f"Token {i+1}" for i in range(len(padroes_nomenclatura[0]))]
-    tree["columns"] = colunas
-    for col in colunas:
-        tree.heading(col, text=col)
-        tree.column(col, width=80, anchor="center")
-    for arq in lista_arquivos:
-        nome_base, _ = os.path.splitext(arq["Nome do Arquivo"])
-        tokens = nome_base.split("-")
-        tags, padrao_usado = verificar_tokens(tokens)
-        item_id = tree.insert("", tk.END, values=tokens)
-        if "mismatch" in tags:
-            tree.item(item_id, tags=("error",))
-        else:
-            tree.item(item_id, tags=("ok",))
-    tree.tag_configure("error", background="#FFCCCC")
-    tree.tag_configure("ok", background="#CCFFCC")
-
 def identificar_revisoes(lista_arquivos):
     grupos = {}
     for arq in lista_arquivos:
@@ -499,14 +409,85 @@ def identificar_revisoes(lista_arquivos):
         arquivos_obsoletos.extend([arq[1] for arq in arquivos[:-1]])
     return arquivos_revisados, arquivos_obsoletos
 
+def tela_analise_nomenclatura(lista_arquivos):
+    janela = tk.Tk()
+    janela.title("Verificação de Nomenclatura")
+    janela.geometry("1200x700")
+    lbl_instrucao = tk.Label(janela, text="Confira a nomenclatura. Caso haja erros, corrija antes de avançar.")
+    lbl_instrucao.pack(pady=10)
+    def recolher_expandir(frame):
+        if frame.winfo_manager():
+            frame.pack_forget()
+        else:
+            frame.pack(fill=tk.X, padx=10, pady=5)
+    canvas = tk.Canvas(janela)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar = tk.Scrollbar(janela, orient="vertical", command=canvas.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    container = tk.Frame(canvas)
+    canvas.create_window((0,0), window=container, anchor="nw")
+    container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    for i, arq in enumerate(lista_arquivos):
+        tokens_frame = tk.Frame(container, bd=1, relief=tk.RIDGE)
+        btn_toggle = ttk.Button(container, text=f"Arquivo {i+1}", command=lambda fr=tokens_frame: recolher_expandir(fr))
+        btn_toggle.pack(fill=tk.X, padx=10, pady=5)
+        tokens_frame.pack(fill=tk.X, padx=10, pady=5)
+        campos = [
+            ("Status", arq.get("Status", "-")),
+            ("Nome do Arquivo", arq.get("Nome do Arquivo", "-")),
+            ("Extensão", arq.get("Extensão", "-")),
+            ("Nº do Arquivo", arq.get("Nº do Arquivo", "-")),
+            ("Fase", arq.get("Fase", "-")),
+            ("Tipo", arq.get("Tipo", "-")),
+            ("Revisão", arq.get("Revisão", "-")),
+            ("Modificação", arq.get("Modificação", "-")),
+            ("Modificado por", arq.get("Modificado por", "-")),
+            ("Entrega", arq.get("Entrega", "-")),
+            ("Extra1", "-"),
+            ("Extra2", "-"),
+            ("Extra3", "-"),
+            ("Extra4", "-")
+        ]
+        rows = 5
+        cols = 4
+        idx_campos = 0
+        for row in range(rows):
+            for col in range(cols):
+                if idx_campos < len(campos):
+                    nome_campo, valor_campo = campos[idx_campos]
+                    label_frame = tk.Frame(tokens_frame, bd=1, relief=tk.GROOVE, width=200, height=30)
+                    label_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                    label_text = f"{nome_campo}: {valor_campo}" if valor_campo else f"{nome_campo}: -"
+                    campo_label = tk.Label(label_frame, text=label_text, anchor="w")
+                    campo_label.pack(fill=tk.BOTH, expand=True)
+                    idx_campos += 1
+                else:
+                    break
+        for row in range(rows):
+            tokens_frame.rowconfigure(row, weight=0)
+        for col in range(cols):
+            tokens_frame.columnconfigure(col, weight=0)
+    def avancar():
+        janela.destroy()
+        tela_verificacao_revisao(lista_arquivos)
+    def voltar():
+        janela.destroy()
+        exibir_interface_tabela("467", lista_arquivos)
+    frm_botoes = tk.Frame(janela)
+    frm_botoes.pack(pady=10)
+    ttk.Button(frm_botoes, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
+    ttk.Button(frm_botoes, text="Avançar", command=avancar, bootstyle="success").pack(side=tk.RIGHT, padx=5)
+    janela.mainloop()
+
 def tela_verificacao_revisao(lista_arquivos):
     arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
     janela = tk.Tk()
     janela.title("Verificação de Revisão")
     janela.geometry("1000x700")
-    lbl_instrucao = tk.Label(janela, text="Confira os arquivos revisados e obsoletos antes da entrega.", font=("Helvetica", 12))
+    lbl_instrucao = tk.Label(janela, text="Confira os arquivos revisados e obsoletos antes da entrega.")
     lbl_instrucao.pack(pady=10)
-    frame_revisados = tk.LabelFrame(janela, text="Arquivos Revisados", font=("Helvetica", 11, "bold"))
+    frame_revisados = tk.LabelFrame(janela, text="Arquivos Revisados")
     frame_revisados.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
     tree_revisados = ttk.Treeview(frame_revisados, columns=["Nome do Arquivo", "Revisão"], show="headings", height=10)
     tree_revisados.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -514,7 +495,7 @@ def tela_verificacao_revisao(lista_arquivos):
     tree_revisados.heading("Revisão", text="Revisão")
     for arq in arquivos_revisados:
         tree_revisados.insert("", tk.END, values=(arq["Nome do Arquivo"], arq["Revisão"]))
-    frame_obsoletos = tk.LabelFrame(janela, text="Arquivos Obsoletos", font=("Helvetica", 11, "bold"))
+    frame_obsoletos = tk.LabelFrame(janela, text="Arquivos Obsoletos")
     frame_obsoletos.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
     tree_obsoletos = ttk.Treeview(frame_obsoletos, columns=["Nome do Arquivo", "Revisão"], show="headings", height=10)
     tree_obsoletos.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -527,15 +508,9 @@ def tela_verificacao_revisao(lista_arquivos):
         tela_analise_nomenclatura(lista_arquivos)
     def confirmar():
         messagebox.showinfo("Confirmação", "Arquivos revisados e obsoletos identificados com sucesso.")
-        print("[DEBUG] Endpoint CONFIRMAR chamado na tela de verificação de revisão.")
-        print("[DEBUG] Iniciando criação das pastas de destino...")
         pasta_revisados, pasta_obsoletos = criar_pastas_organizacao()
-        print(f"[DEBUG] Pastas criadas: Revisados: {pasta_revisados}, Obsoletos: {pasta_obsoletos}")
-        print("[DEBUG] Iniciando a movimentação dos arquivos revisados...")
         mover_arquivos(arquivos_revisados, pasta_revisados)
-        print("[DEBUG] Iniciando a movimentação dos arquivos obsoletos...")
         mover_obsoletos(arquivos_obsoletos, pasta_obsoletos)
-        print("[DEBUG] Endpoint CONFIRMAR finalizado. Encerrando a janela de revisão.")
         janela.destroy()
     btn_frame = tk.Frame(janela)
     btn_frame.pack(pady=10)
