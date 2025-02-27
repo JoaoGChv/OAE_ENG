@@ -15,6 +15,14 @@ PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
 PADROES_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\ui\padrões.json"
+CONFIG_NOMENCLATURA_JSON = "config_nomenclatura.json"
+
+def carregar_config_nomenclatura():
+    if os.path.exists(CONFIG_NOMENCLATURA_JSON):
+        with open(CONFIG_NOMENCLATURA_JSON, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return {"config_revisao": {}, "config_valores": {}}
 
 def carregar_padroes_nomenclatura():
     if os.path.exists(PADROES_JSON):
@@ -61,7 +69,7 @@ def atualizar_historico(lista_arquivos, caminho_json=HISTORICO_JSON):
     mais_recente = max(historico, key=lambda x: historico[x]["data"])
     for arq in historico:
         historico[arq]["status"] = "Atual" if arq == mais_recente else "Obsoleto"
-    with open(caminho_json, "w", encoding="utf-8") as f:
+    with open(caminho_json, 'w', encoding='utf-8') as f:
         json.dump(historico, f, indent=4, ensure_ascii=False)
     return historico
 
@@ -325,7 +333,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
     lbl_instrucao.place(x=10, y=10)
     frm_botoes = tk.Frame(conteudo_principal)
     frm_botoes.pack(side=tk.TOP, anchor="ne", pady=10, padx=10)
-    ttk.Button(frm_botoes, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura, bootstyle="info").pack(side=tk.LEFT, padx=5)
+    ttk.Button(frm_botoes, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura).pack(side=tk.LEFT, padx=5)
     cols = ["Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo", "Fase", "Tipo", "Revisão", "Modificação", "Modificado por", "Entrega", "caminho"]
     tabela = ttk.Treeview(conteudo_principal, columns=cols, show="headings", height=20)
     for col in cols:
@@ -381,11 +389,11 @@ def exibir_interface_tabela(numero, arquivos_previos=None):
             messagebox.showinfo("Informação", "Nenhum item selecionado.")
     btn_frame = tk.Frame(conteudo_principal)
     btn_frame.pack(side=tk.LEFT, pady=10, padx=10)
-    ttk.Button(btn_frame, text="Adicionar Arquivo", command=adicionar_arquivos, bootstyle="success").pack(side=tk.LEFT, padx=5)
-    ttk.Button(btn_frame, text="Remover Arquivo", command=remover_arquivo, bootstyle="warning").pack(side=tk.LEFT, padx=5)
-    btn_frame = tk.Frame(conteudo_principal)
-    btn_frame.pack(side=tk.RIGHT, pady=10, padx=10)
-    ttk.Button(btn_frame, text="Sair", command=janela.destroy, bootstyle="danger").pack(side=tk.RIGHT, padx=5)
+    ttk.Button(btn_frame, text="Adicionar Arquivo", command=adicionar_arquivos).pack(side=tk.LEFT, padx=5)
+    ttk.Button(btn_frame, text="Remover Arquivo", command=remover_arquivo).pack(side=tk.LEFT, padx=5)
+    btn_frame2 = tk.Frame(conteudo_principal)
+    btn_frame2.pack(side="bottom", anchor="e", pady=5, padx=10)
+    ttk.Button(btn_frame2, text="Sair", command=janela.destroy).pack(side=tk.RIGHT, padx=5)
     janela.mainloop()
 
 def identificar_revisoes(lista_arquivos):
@@ -410,16 +418,14 @@ def identificar_revisoes(lista_arquivos):
     return arquivos_revisados, arquivos_obsoletos
 
 def tela_analise_nomenclatura(lista_arquivos):
+    config_nomenclatura = carregar_config_nomenclatura()
+    conf_revisao = config_nomenclatura.get("config_revisao", {})
+    conf_valores = config_nomenclatura.get("config_valores", {})
     janela = tk.Tk()
     janela.title("Verificação de Nomenclatura")
     janela.geometry("1200x700")
     lbl_instrucao = tk.Label(janela, text="Confira a nomenclatura. Caso haja erros, corrija antes de avançar.")
     lbl_instrucao.pack(pady=10)
-    def recolher_expandir(frame):
-        if frame.winfo_manager():
-            frame.pack_forget()
-        else:
-            frame.pack(fill=tk.X, padx=10, pady=5)
     canvas = tk.Canvas(janela)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar = tk.Scrollbar(janela, orient="vertical", command=canvas.yview)
@@ -428,56 +434,85 @@ def tela_analise_nomenclatura(lista_arquivos):
     container = tk.Frame(canvas)
     canvas.create_window((0,0), window=container, anchor="nw")
     container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    fields_in_error = set()
+    def recolher_expandir(holder):
+        if holder["visible"]:
+            holder["frame"].pack_forget()
+            holder["visible"] = False
+        else:
+            holder["frame"].pack(**holder["pack_info"])
+            holder["visible"] = True
+    def validate_entry(entry_var, campo, error_label):
+        typed_value = entry_var.get().strip()
+        valor_certo = conf_valores.get(campo, {}).get("valor_aceito", "")
+        msg_erro = conf_valores.get(campo, {}).get("mensagem_erro", "")
+        if typed_value == valor_certo:
+            fields_in_error.discard(campo)
+            error_label.config(text="", fg="red")
+        else:
+            fields_in_error.add(campo)
+            error_label.config(text=msg_erro, fg="red")
+    holders = []
     for i, arq in enumerate(lista_arquivos):
-        tokens_frame = tk.Frame(container, bd=1, relief=tk.RIDGE)
-        btn_toggle = ttk.Button(container, text=f"Arquivo {i+1}", command=lambda fr=tokens_frame: recolher_expandir(fr))
-        btn_toggle.pack(fill=tk.X, padx=10, pady=5)
-        tokens_frame.pack(fill=tk.X, padx=10, pady=5)
+        top_frame = tk.Frame(container, bd=1, relief=tk.RIDGE)
+        top_frame.pack(fill=tk.X, padx=10, pady=5)
+        toggle_button = ttk.Button(top_frame, text=f"Arquivo {i+1}")
+        toggle_button.pack(fill=tk.X)
+        detail_frame = tk.Frame(top_frame, bd=1, relief=tk.GROOVE)
+        detail_frame.pack(fill=tk.X, padx=10, pady=5)
+        pack_info = dict(fill="x", padx=10, pady=5)
+        holder = {"frame": detail_frame, "pack_info": pack_info, "visible": True}
+        toggle_button.config(command=lambda h=holder: recolher_expandir(h))
+        holders.append(holder)
         campos = [
-            ("Status", arq.get("Status", "-")),
-            ("Nome do Arquivo", arq.get("Nome do Arquivo", "-")),
-            ("Extensão", arq.get("Extensão", "-")),
-            ("Nº do Arquivo", arq.get("Nº do Arquivo", "-")),
-            ("Fase", arq.get("Fase", "-")),
-            ("Tipo", arq.get("Tipo", "-")),
-            ("Revisão", arq.get("Revisão", "-")),
-            ("Modificação", arq.get("Modificação", "-")),
-            ("Modificado por", arq.get("Modificado por", "-")),
-            ("Entrega", arq.get("Entrega", "-")),
-            ("Extra1", "-"),
-            ("Extra2", "-"),
-            ("Extra3", "-"),
-            ("Extra4", "-")
+            ("Status", arq.get("Status", "")),
+            ("Nome do Arquivo", arq.get("Nome do Arquivo", "")),
+            ("Extensão", arq.get("Extensão", "")),
+            ("Nº do Arquivo", arq.get("Nº do Arquivo", "")),
+            ("Fase", arq.get("Fase", "")),
+            ("Tipo", arq.get("Tipo", "")),
+            ("Revisão", arq.get("Revisão", "")),
+            ("Modificação", arq.get("Modificação", "")),
+            ("Modificado por", arq.get("Modificado por", "")),
+            ("Entrega", arq.get("Entrega", ""))
         ]
-        rows = 5
-        cols = 4
+        row_max = 5
+        col_max = 2
         idx_campos = 0
-        for row in range(rows):
-            for col in range(cols):
+        for row in range(row_max):
+            for col in range(col_max):
                 if idx_campos < len(campos):
                     nome_campo, valor_campo = campos[idx_campos]
-                    label_frame = tk.Frame(tokens_frame, bd=1, relief=tk.GROOVE, width=200, height=30)
-                    label_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-                    label_text = f"{nome_campo}: {valor_campo}" if valor_campo else f"{nome_campo}: -"
-                    campo_label = tk.Label(label_frame, text=label_text, anchor="w")
-                    campo_label.pack(fill=tk.BOTH, expand=True)
+                    c_frame = tk.Frame(detail_frame, bd=1, relief=tk.FLAT)
+                    c_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                    lab = tk.Label(c_frame, text=nome_campo + ":")
+                    lab.pack(anchor="w")
+                    val_var = tk.StringVar(value=valor_campo)
+                    error_lbl = tk.Label(c_frame, text="", fg="red")
+                    def callback(svar=val_var, c=nome_campo, el=error_lbl):
+                        validate_entry(svar, c, el)
+                    val_entry = tk.Entry(c_frame, textvariable=val_var, width=30)
+                    val_entry.bind("<KeyRelease>", lambda e, cb=callback: cb())
+                    val_entry.pack(fill=tk.X, expand=True)
+                    error_lbl.pack(anchor="w")
                     idx_campos += 1
-                else:
-                    break
-        for row in range(rows):
-            tokens_frame.rowconfigure(row, weight=0)
-        for col in range(cols):
-            tokens_frame.columnconfigure(col, weight=0)
+        for row in range(row_max):
+            detail_frame.rowconfigure(row, weight=0)
+        for col in range(col_max):
+            detail_frame.columnconfigure(col, weight=1)
     def avancar():
-        janela.destroy()
-        tela_verificacao_revisao(lista_arquivos)
+        if fields_in_error:
+            messagebox.showerror("Erro", "Existem campos com erro. Corrija antes de prosseguir.")
+        else:
+            janela.destroy()
+            tela_verificacao_revisao(lista_arquivos)
     def voltar():
         janela.destroy()
         exibir_interface_tabela("467", lista_arquivos)
-    frm_botoes = tk.Frame(janela)
-    frm_botoes.pack(pady=10)
-    ttk.Button(frm_botoes, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
-    ttk.Button(frm_botoes, text="Avançar", command=avancar, bootstyle="success").pack(side=tk.RIGHT, padx=5)
+    btn_frame = tk.Frame(janela)
+    btn_frame.pack(side="bottom", anchor="e", pady=5, padx=10)
+    ttk.Button(btn_frame, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
+    ttk.Button(btn_frame, text="Avançar", command=avancar).pack(side=tk.RIGHT, padx=5)
     janela.mainloop()
 
 def tela_verificacao_revisao(lista_arquivos):
@@ -512,10 +547,10 @@ def tela_verificacao_revisao(lista_arquivos):
         mover_arquivos(arquivos_revisados, pasta_revisados)
         mover_obsoletos(arquivos_obsoletos, pasta_obsoletos)
         janela.destroy()
-    btn_frame = tk.Frame(janela)
-    btn_frame.pack(pady=10)
-    ttk.Button(btn_frame, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
-    ttk.Button(btn_frame, text="Confirmar", command=confirmar, bootstyle="success").pack(side=tk.RIGHT, padx=5)
+    bf = tk.Frame(janela)
+    bf.pack(side="bottom", anchor="e", pady=5, padx=10)
+    ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
+    ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.RIGHT, padx=5)
     janela.mainloop()
 
 if __name__ == "__main__":
