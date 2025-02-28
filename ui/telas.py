@@ -10,6 +10,7 @@ from ttkbootstrap.constants import *
 import shutil
 import sys
 
+MARGIN_SIZE = 10
 JSON_FILE_PATH = "dados_projetos.json"
 PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
@@ -424,14 +425,18 @@ def tela_analise_nomenclatura(lista_arquivos):
     janela = tk.Tk()
     janela.title("Verificação de Nomenclatura")
     janela.geometry("1200x700")
-    lbl_instrucao = tk.Label(janela, text="Confira a nomenclatura. Caso haja erros, corrija antes de avançar.")
-    lbl_instrucao.pack(pady=10)
-    canvas = tk.Canvas(janela)
+    frm_top = tk.Frame(janela)
+    frm_top.pack(fill=tk.X)
+    lbl_instrucao = tk.Label(frm_top, text="Confira a nomenclatura. Caso haja erros, corrija antes de avançar.", font=("Helvetica", 12))
+    lbl_instrucao.pack(pady=MARGIN_SIZE)
+    frm_main = tk.Frame(janela)
+    frm_main.pack(fill=tk.BOTH, expand=True)
+    canvas = tk.Canvas(frm_main)
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    scrollbar = tk.Scrollbar(janela, orient="vertical", command=canvas.yview)
+    scrollbar = tk.Scrollbar(frm_main, orient="vertical", command=canvas.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     canvas.configure(yscrollcommand=scrollbar.set)
-    container = tk.Frame(canvas)
+    container = tk.Frame(canvas, bg="#ECE2E2")
     canvas.create_window((0,0), window=container, anchor="nw")
     container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     fields_in_error = set()
@@ -454,13 +459,13 @@ def tela_analise_nomenclatura(lista_arquivos):
             error_label.config(text=msg_erro, fg="red")
     holders = []
     for i, arq in enumerate(lista_arquivos):
-        top_frame = tk.Frame(container, bd=1, relief=tk.RIDGE)
-        top_frame.pack(fill=tk.X, padx=10, pady=5)
+        top_frame = tk.Frame(container, bd=1, relief=tk.RIDGE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
+        top_frame.pack(fill=tk.X, padx=MARGIN_SIZE, pady=MARGIN_SIZE)
         toggle_button = ttk.Button(top_frame, text=f"Arquivo {i+1}")
         toggle_button.pack(fill=tk.X)
-        detail_frame = tk.Frame(top_frame, bd=1, relief=tk.GROOVE)
-        detail_frame.pack(fill=tk.X, padx=10, pady=5)
-        pack_info = dict(fill="x", padx=10, pady=5)
+        detail_frame = tk.Frame(top_frame, bd=1, relief=tk.GROOVE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
+        detail_frame.pack(fill=tk.X)
+        pack_info = dict(fill="x", padx=MARGIN_SIZE, pady=MARGIN_SIZE)
         holder = {"frame": detail_frame, "pack_info": pack_info, "visible": True}
         toggle_button.config(command=lambda h=holder: recolher_expandir(h))
         holders.append(holder)
@@ -483,17 +488,17 @@ def tela_analise_nomenclatura(lista_arquivos):
             for col in range(col_max):
                 if idx_campos < len(campos):
                     nome_campo, valor_campo = campos[idx_campos]
-                    c_frame = tk.Frame(detail_frame, bd=1, relief=tk.FLAT)
-                    c_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-                    lab = tk.Label(c_frame, text=nome_campo + ":")
+                    c_frame = tk.Frame(detail_frame, bd=1, relief=tk.FLAT, bg="#ECE2E2")
+                    c_frame.grid(row=row, column=col, padx=MARGIN_SIZE, pady=MARGIN_SIZE, sticky="nsew")
+                    lab = tk.Label(c_frame, text=nome_campo + ":", bg="#ECE2E2")
                     lab.pack(anchor="w")
                     val_var = tk.StringVar(value=valor_campo)
-                    error_lbl = tk.Label(c_frame, text="", fg="red")
+                    error_lbl = tk.Label(c_frame, text="", fg="red", bg="#ECE2E2")
                     def callback(svar=val_var, c=nome_campo, el=error_lbl):
                         validate_entry(svar, c, el)
                     val_entry = tk.Entry(c_frame, textvariable=val_var, width=30)
                     val_entry.bind("<KeyRelease>", lambda e, cb=callback: cb())
-                    val_entry.pack(fill=tk.X, expand=True)
+                    val_entry.pack(fill=tk.X)
                     error_lbl.pack(anchor="w")
                     idx_campos += 1
         for row in range(row_max):
@@ -510,7 +515,7 @@ def tela_analise_nomenclatura(lista_arquivos):
         janela.destroy()
         exibir_interface_tabela("467", lista_arquivos)
     btn_frame = tk.Frame(janela)
-    btn_frame.pack(side="bottom", anchor="e", pady=5, padx=10)
+    btn_frame.pack(side="bottom", anchor="e", pady=MARGIN_SIZE, padx=MARGIN_SIZE)
     ttk.Button(btn_frame, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
     ttk.Button(btn_frame, text="Avançar", command=avancar).pack(side=tk.RIGHT, padx=5)
     janela.mainloop()
