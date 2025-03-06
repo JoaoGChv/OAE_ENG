@@ -18,17 +18,17 @@ HISTORICO_JSON = "historico_arquivos.json"
 PADROES_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\ui\padrões.json"
 CONFIG_NOMENCLATURA_JSON = "config_nomenclatura.json"
 
-def set_close_behavior(window, prev_func=None, *prev_args):
-    """
-    Configura o comportamento de fechamento da janela.
-    Se prev_func for fornecida, ao fechar a janela, esta será destruída
-    e a função prev_func será chamada com os argumentos prev_args.
-    Caso contrário, a janela apenas será destruída.
-    """
-    if prev_func:
-        window.protocol("WM_DELETE_WINDOW", lambda: (window.destroy(), prev_func(*prev_args)))
-    else:
-        window.protocol("WM_DELETE_WINDOW", window.destroy)
+# -----------------------------------------------
+# NOVO DICIONÁRIO DE REGRAS PARA VALIDAÇÃO
+# Exemplo de campos e valores aceitáveis.
+# Ajuste conforme suas tabelas específicas.
+# -----------------------------------------------
+NOMENCLATURA_RULES = {
+    "Status": ["E", "C", "P", "A", "R"],
+    "Fase": ["PE", "AP", "EX"],
+    "Tipo": ["ARQ", "ELE", "HID", "SCO", "DTE", "MEM", "RLT"]
+    # Adicione mais campos/valores conforme necessário
+}
 
 def carregar_config_nomenclatura():
     if os.path.exists(CONFIG_NOMENCLATURA_JSON):
@@ -156,8 +156,6 @@ def janela_selecao_projeto():
     root = tk.Tk()
     root.title("Selecionar Projeto")
     root.geometry("600x400")
-    # Como é a tela inicial, ao fechar ela apenas se encerra.
-    set_close_behavior(root)
 
     projetos_dict = carregar_projetos()
     style = ttkbootstrap.Style(theme="flatly")
@@ -227,6 +225,7 @@ def janela_selecao_projeto():
     ttk.Button(btn_frame, text="Confirmar", command=confirmar, bootstyle="success").pack(side=tk.LEFT, padx=5)
     ttk.Button(btn_frame, text="Cancelar", command=root.destroy, bootstyle="danger").pack(side=tk.LEFT, padx=5)
 
+    # Tela inicial não precisa de "Voltar"
     root.mainloop()
     return sel["numero"], sel["caminho"]
 
@@ -243,8 +242,6 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
     nova_janela = tk.Tk()
     nova_janela.title(f"Gerenciador de Projetos - Projeto {numero}")
     nova_janela.geometry("900x600")
-    # Ao fechar esta tela, reabre a tela de seleção de projeto.
-    set_close_behavior(nova_janela, janela_selecao_projeto)
 
     header = tk.Label(
         nova_janela,
@@ -306,14 +303,14 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
             return
 
         nova_janela.destroy()
-        exibir_interface_tabela(numero, arquivos_previos=arquivos_processados)
+        exibir_interface_tabela(numero, arquivos_previos=arquivos_processados,)
 
     def voltar():
         nova_janela.destroy()
         janela_selecao_projeto()
 
-    frame = tk.Frame(nova_janela, bg="#f5f5f5", padx=20, pady=20)
-    frame.pack(fill=tk.BOTH, expand=True)
+    content = tk.Frame(nova_janela, bg="#f5f5f5", padx=20, pady=20)
+    content.pack(fill=tk.BOTH, expand=True)
 
     btn_frame = tk.Frame(nova_janela)
     btn_frame.pack(fill=tk.X, pady=5, padx=10)
@@ -372,15 +369,10 @@ def extrair_dados_arquivo(nome_arquivo):
         }
     return dados
 
-def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None):
+def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None):
     janela = tk.Tk()
     janela.title(f"Gerenciador de Projetos - Projeto {numero}")
     janela.geometry("1200x800")
-    # Define o comportamento de fechamento: se project_caminho estiver definido, volta para Disciplinas_Detalhes_Projeto; caso contrário, para seleção de projeto.
-    if project_caminho:
-        set_close_behavior(janela, Disciplinas_Detalhes_Projeto, numero, project_caminho)
-    else:
-        set_close_behavior(janela, janela_selecao_projeto)
 
     frame_principal = tk.Frame(janela)
     frame_principal.pack(fill=tk.BOTH, expand=True)
@@ -388,17 +380,39 @@ def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None)
     barra_lateral = tk.Frame(frame_principal, bg="#2c3e50", width=200)
     barra_lateral.pack(side=tk.LEFT, fill=tk.Y)
 
-    lbl_titulo = tk.Label(barra_lateral, text="OAE - Engenharia", font=("Helvetica", 14, "bold"), bg="#2c3e50", fg="white")
+    lbl_titulo = tk.Label(
+        barra_lateral,
+        text="OAE - Engenharia",
+        font=("Helvetica", 14, "bold"),
+        bg="#2c3e50",
+        fg="white"
+    )
     lbl_titulo.pack(pady=10)
 
-    lbl_projetos = tk.Label(barra_lateral, text="PROJETOS", font=("Helvetica", 10, "bold"), bg="#34495e", fg="white", anchor="w", padx=10)
+    lbl_projetos = tk.Label(
+        barra_lateral,
+        text="PROJETOS",
+        font=("Helvetica", 10, "bold"),
+        bg="#34495e",
+        fg="white",
+        anchor="w",
+        padx=10
+    )
     lbl_projetos.pack(fill=tk.X, pady=5)
 
     lst_projetos = tk.Listbox(barra_lateral, height=5, bg="#ecf0f1", font=("Helvetica", 9))
     lst_projetos.pack(fill=tk.X, padx=10, pady=5)
     lst_projetos.insert(tk.END, "OAE-467 - PETER-KD-ENG")
 
-    lbl_membros = tk.Label(barra_lateral, text="MEMBROS", font=("Helvetica", 10, "bold"), bg="#34495e", fg="white", anchor="w", padx=10)
+    lbl_membros = tk.Label(
+        barra_lateral,
+        text="MEMBROS",
+        font=("Helvetica", 10, "bold"),
+        bg="#34495e",
+        fg="white",
+        anchor="w",
+        padx=10
+    )
     lbl_membros.pack(fill=tk.X, pady=5)
 
     barra_lateral.pack_propagate(False)
@@ -429,7 +443,12 @@ def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None)
             janela.destroy()
             tela_analise_nomenclatura(lista_arquivos)
 
-    lbl_instrucao = tk.Label(conteudo_principal, text="Adicionar Arquivos para Entrega", font=("Helvetica", 15, "bold"), anchor="w")
+    lbl_instrucao = tk.Label(
+        conteudo_principal,
+        text="Adicionar Arquivos para Entrega",
+        font=("Helvetica", 15, "bold"),
+        anchor="w"
+    )
     lbl_instrucao.place(x=10, y=10)
 
     frm_botoes = tk.Frame(conteudo_principal)
@@ -437,7 +456,11 @@ def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None)
 
     ttk.Button(frm_botoes, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura).pack(side=tk.LEFT, padx=5)
 
-    cols = ["Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo", "Fase", "Tipo", "Revisão", "Modificação", "Modificado por", "Entrega", "caminho"]
+    cols = [
+        "Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo",
+        "Fase", "Tipo", "Revisão", "Modificação",
+        "Modificado por", "Entrega", "caminho"
+    ]
     tabela = ttk.Treeview(conteudo_principal, columns=cols, show="headings", height=20)
     for col in cols:
         tabela.heading(col, text=col)
@@ -447,7 +470,12 @@ def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None)
             tabela.column(col, width=0, stretch=False, minwidth=0)
         else:
             tabela.column(col, width=120)
-    tabela["displaycolumns"] = ("Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo", "Fase", "Tipo", "Revisão", "Modificação", "Modificado por", "Entrega")
+
+    tabela["displaycolumns"] = (
+        "Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo",
+        "Fase", "Tipo", "Revisão", "Modificação",
+        "Modificado por", "Entrega"
+    )
     tabela.pack(fill=tk.BOTH, expand=True)
 
     if arquivos_previos:
@@ -496,10 +524,8 @@ def exibir_interface_tabela(numero, arquivos_previos=None, project_caminho=None)
 
     def voltar():
         janela.destroy()
-        if project_caminho:
-            Disciplinas_Detalhes_Projeto(numero, project_caminho)
-        else:
-            janela_selecao_projeto()
+        # Ajuste este destino conforme desejado
+        Disciplinas_Detalhes_Projeto(numero, caminho_projeto if caminho_projeto else "")
 
     btn_frame = tk.Frame(conteudo_principal)
     btn_frame.pack(side=tk.LEFT, pady=10, padx=10)
@@ -525,16 +551,23 @@ def identificar_revisoes(lista_arquivos):
         if identificador not in grupos:
             grupos[identificador] = []
         grupos[identificador].append((revisao, arq))
+
     arquivos_revisados = []
     arquivos_obsoletos = []
+
     for identificador, arquivos in grupos.items():
         arquivos.sort(key=lambda x: int(x[0][1:]))
         revisao_mais_recente = arquivos[-1][1]
         arquivos_revisados.append(revisao_mais_recente)
         arquivos_obsoletos.extend([arq[1] for arq in arquivos[:-1]])
+
     return arquivos_revisados, arquivos_obsoletos
 
 def tela_analise_nomenclatura(lista_arquivos):
+    """
+    Tela de verificação de nomenclatura, agora com checagem adicional usando
+    NOMENCLATURA_RULES, integrando com a lógica existente de conf_valores.
+    """
     config_nomenclatura = carregar_config_nomenclatura()
     conf_revisao = config_nomenclatura.get("config_revisao", {})
     conf_valores = config_nomenclatura.get("config_valores", {})
@@ -542,8 +575,6 @@ def tela_analise_nomenclatura(lista_arquivos):
     janela = tk.Tk()
     janela.title("Verificação de Nomenclatura")
     janela.geometry("1200x700")
-    # Ao fechar esta tela, volta para a tela de tabela (com número fixo "467" e os arquivos atuais)
-    set_close_behavior(janela, exibir_interface_tabela, "467", lista_arquivos)
 
     frm_top = tk.Frame(janela)
     frm_top.pack(fill=tk.X)
@@ -578,16 +609,39 @@ def tela_analise_nomenclatura(lista_arquivos):
             holder["frame"].pack(**holder["pack_info"])
             holder["visible"] = True
 
+    def validate_with_rules(campo, typed_value):
+        """
+        Checa typed_value contra NOMENCLATURA_RULES se o campo estiver definido lá.
+        """
+        # Se o campo estiver no dicionário de regras e typed_value não estiver na lista, retorna False
+        if campo in NOMENCLATURA_RULES:
+            if typed_value not in NOMENCLATURA_RULES[campo]:
+                return False
+        return True
+
     def validate_entry(entry_var, campo, error_label):
         typed_value = entry_var.get().strip()
+
+        # Validação via conf_valores
         valor_certo = conf_valores.get(campo, {}).get("valor_aceito", "")
         msg_erro = conf_valores.get(campo, {}).get("mensagem_erro", "")
-        if typed_value == valor_certo:
-            fields_in_error.discard(campo)
-            error_label.config(text="", fg="red")
-        else:
+
+        # Se conf_valores exigir um valor_certo exato
+        if valor_certo and typed_value != valor_certo:
             fields_in_error.add(campo)
             error_label.config(text=msg_erro, fg="red")
+            return
+
+        # Se não violou conf_valores, verificar NOMENCLATURA_RULES
+        if not validate_with_rules(campo, typed_value):
+            fields_in_error.add(campo)
+            error_label.config(
+                text=f"O valor '{typed_value}' não consta em NOMENCLATURA_RULES para '{campo}'.",
+                fg="red"
+            )
+        else:
+            fields_in_error.discard(campo)
+            error_label.config(text="", fg="red")
 
     holders = []
     for i, arq in enumerate(lista_arquivos):
@@ -673,8 +727,6 @@ def tela_verificacao_revisao(lista_arquivos):
     janela = tk.Tk()
     janela.title("Verificação de Revisão")
     janela.geometry("1000x700")
-    # Ao fechar esta tela, volta para a tela de análise de nomenclatura.
-    set_close_behavior(janela, tela_analise_nomenclatura, lista_arquivos)
 
     lbl_instrucao = tk.Label(janela, text="Confira os arquivos revisados e obsoletos antes da entrega.")
     lbl_instrucao.pack(pady=10)
