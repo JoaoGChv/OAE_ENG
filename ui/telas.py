@@ -225,7 +225,6 @@ def janela_selecao_projeto():
     ttk.Button(btn_frame, text="Confirmar", command=confirmar, bootstyle="success").pack(side=tk.LEFT, padx=5)
     ttk.Button(btn_frame, text="Cancelar", command=root.destroy, bootstyle="danger").pack(side=tk.LEFT, padx=5)
 
-    # Tela inicial não precisa de "Voltar"
     root.mainloop()
     return sel["numero"], sel["caminho"]
 
@@ -524,7 +523,6 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
 
     def voltar():
         janela.destroy()
-        # Ajuste este destino conforme desejado
         Disciplinas_Detalhes_Projeto(numero, caminho_projeto if caminho_projeto else "")
 
     btn_frame = tk.Frame(conteudo_principal)
@@ -565,8 +563,9 @@ def identificar_revisoes(lista_arquivos):
 
 def tela_analise_nomenclatura(lista_arquivos):
     """
-    Tela de verificação de nomenclatura, agora com checagem adicional usando
-    NOMENCLATURA_RULES, integrando com a lógica existente de conf_valores.
+    Tela de verificação de nomenclatura,
+    agora ajustada para exibir cartões SEM expandir/recolher,
+    lado a lado ou empilhados, mas sempre exibidos.
     """
     config_nomenclatura = carregar_config_nomenclatura()
     conf_revisao = config_nomenclatura.get("config_revisao", {})
@@ -576,11 +575,9 @@ def tela_analise_nomenclatura(lista_arquivos):
     janela.title("Verificação de Nomenclatura")
     janela.geometry("1200x700")
 
-    frm_top = tk.Frame(janela)
-    frm_top.pack(fill=tk.X)
     lbl_instrucao = tk.Label(
-        frm_top,
-        text="Confira a nomenclatura. Caso haja erros, corrija antes de avançar.",
+        janela,
+        text="Confira a nomenclatura. Clique no nome se desejar editar campos. Corrija antes de avançar, se necessário.",
         font=("Helvetica", 12)
     )
     lbl_instrucao.pack(pady=MARGIN_SIZE)
@@ -596,24 +593,12 @@ def tela_analise_nomenclatura(lista_arquivos):
     canvas.configure(yscrollcommand=scrollbar.set)
 
     container = tk.Frame(canvas, bg="#ECE2E2")
-    canvas.create_window((0,0), window=container, anchor="nw")
+    canvas.create_window((0,0), window=container, anchor="n")
     container.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     fields_in_error = set()
 
-    def recolher_expandir(holder):
-        if holder["visible"]:
-            holder["frame"].pack_forget()
-            holder["visible"] = False
-        else:
-            holder["frame"].pack(**holder["pack_info"])
-            holder["visible"] = True
-
     def validate_with_rules(campo, typed_value):
-        """
-        Checa typed_value contra NOMENCLATURA_RULES se o campo estiver definido lá.
-        """
-        # Se o campo estiver no dicionário de regras e typed_value não estiver na lista, retorna False
         if campo in NOMENCLATURA_RULES:
             if typed_value not in NOMENCLATURA_RULES[campo]:
                 return False
@@ -621,18 +606,14 @@ def tela_analise_nomenclatura(lista_arquivos):
 
     def validate_entry(entry_var, campo, error_label):
         typed_value = entry_var.get().strip()
-
-        # Validação via conf_valores
         valor_certo = conf_valores.get(campo, {}).get("valor_aceito", "")
         msg_erro = conf_valores.get(campo, {}).get("mensagem_erro", "")
 
-        # Se conf_valores exigir um valor_certo exato
         if valor_certo and typed_value != valor_certo:
             fields_in_error.add(campo)
             error_label.config(text=msg_erro, fg="red")
             return
 
-        # Se não violou conf_valores, verificar NOMENCLATURA_RULES
         if not validate_with_rules(campo, typed_value):
             fields_in_error.add(campo)
             error_label.config(
@@ -643,20 +624,40 @@ def tela_analise_nomenclatura(lista_arquivos):
             fields_in_error.discard(campo)
             error_label.config(text="", fg="red")
 
-    holders = []
+    # Render all cards always expanded
     for i, arq in enumerate(lista_arquivos):
-        top_frame = tk.Frame(container, bd=1, relief=tk.RIDGE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
-        top_frame.pack(fill=tk.X, padx=MARGIN_SIZE, pady=MARGIN_SIZE)
+        card_frame = tk.Frame(
+            container,
+            bd=1,
+            relief=tk.RIDGE,
+            padx=MARGIN_SIZE,
+            pady=MARGIN_SIZE,
+            bg="#ECE2E2"
+        )
+        card_frame.pack(
+            padx=MARGIN_SIZE,
+            pady=MARGIN_SIZE,
+            fill=tk.X
+        )
 
-        toggle_button = ttk.Button(top_frame, text=f"Arquivo {i+1}")
-        toggle_button.pack(fill=tk.X)
+        # Header (show file name only)
+        header_label = tk.Label(
+            card_frame,
+            text=arq["Nome do Arquivo"],
+            font=("Helvetica", 10, "bold"),
+            bg="#ECE2E2"
+        )
+        header_label.pack(anchor="center", pady=5)
 
-        detail_frame = tk.Frame(top_frame, bd=1, relief=tk.GROOVE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
+        detail_frame = tk.Frame(
+            card_frame,
+            bd=1,
+            relief=tk.GROOVE,
+            padx=MARGIN_SIZE,
+            pady=MARGIN_SIZE,
+            bg="#ECE2E2"
+        )
         detail_frame.pack(fill=tk.X)
-        pack_info = dict(fill="x", padx=MARGIN_SIZE, pady=MARGIN_SIZE)
-        holder = {"frame": detail_frame, "pack_info": pack_info, "visible": True}
-        toggle_button.config(command=lambda h=holder: recolher_expandir(h))
-        holders.append(holder)
 
         campos = [
             ("Status", arq.get("Status", "")),
@@ -674,18 +675,34 @@ def tela_analise_nomenclatura(lista_arquivos):
         row_max = 5
         col_max = 2
         idx_campos = 0
-        for row in range(row_max):
-            for col in range(col_max):
+        for rr in range(row_max):
+            for cc in range(col_max):
                 if idx_campos < len(campos):
                     nome_campo, valor_campo = campos[idx_campos]
-                    c_frame = tk.Frame(detail_frame, bd=1, relief=tk.FLAT, bg="#ECE2E2")
-                    c_frame.grid(row=row, column=col, padx=MARGIN_SIZE, pady=MARGIN_SIZE, sticky="nsew")
+                    c_frame = tk.Frame(
+                        detail_frame,
+                        bd=1,
+                        relief=tk.FLAT,
+                        bg="#ECE2E2"
+                    )
+                    c_frame.grid(
+                        row=rr, column=cc,
+                        padx=MARGIN_SIZE,
+                        pady=MARGIN_SIZE,
+                        sticky="nsew"
+                    )
 
-                    lab = tk.Label(c_frame, text=nome_campo + ":", bg="#ECE2E2")
+                    lab = tk.Label(
+                        c_frame,
+                        text=nome_campo + ":",
+                        bg="#ECE2E2"
+                    )
                     lab.pack(anchor="w")
 
                     val_var = tk.StringVar(value=valor_campo)
-                    error_lbl = tk.Label(c_frame, text="", fg="red", bg="#ECE2E2")
+                    error_lbl = tk.Label(
+                        c_frame, text="", fg="red", bg="#ECE2E2"
+                    )
 
                     def callback(svar=val_var, c=nome_campo, el=error_lbl):
                         validate_entry(svar, c, el)
@@ -698,10 +715,10 @@ def tela_analise_nomenclatura(lista_arquivos):
 
                     idx_campos += 1
 
-        for row in range(row_max):
-            detail_frame.rowconfigure(row, weight=0)
-        for col in range(col_max):
-            detail_frame.columnconfigure(col, weight=1)
+        for rr in range(row_max):
+            detail_frame.rowconfigure(rr, weight=0)
+        for cc in range(col_max):
+            detail_frame.columnconfigure(cc, weight=1)
 
     def avancar():
         if fields_in_error:
