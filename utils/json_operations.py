@@ -12,6 +12,7 @@ def carregar_nomenclatura_json(numero_projeto, caminho_json):
         print(f"Erro ao carregar nomenclatura JSON: {e}")
         return None
 
+
 def salvar_dados(caminho, dados):
     try:
         with open(caminho, 'w', encoding='utf-8') as f:

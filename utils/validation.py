@@ -11,6 +11,7 @@ def identificar_nome_com_revisao(nome_arquivo):
         return nome_base, revisao, extensao.lower()
     return nome_sem_extensao, '', extensao.lower()
 
+
 def verificar_tokens(tokens, nomenclatura):
     if not nomenclatura:
         return ['mismatch'] * len(tokens)

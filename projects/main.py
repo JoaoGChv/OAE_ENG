@@ -15,6 +15,7 @@ def main():
     if numero_projeto and caminho_projeto:
         print(f"Projeto selecionado: Número {numero_projeto}, Caminho {caminho_projeto}")
         # Aqui você pode continuar o fluxo de processamento
+        
     else:
         print("Nenhum projeto foi selecionado.")
 

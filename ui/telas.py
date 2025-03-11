@@ -198,6 +198,7 @@ def Disciplinas_Detalhes_Projeto(numero,caminho):
             return
         nova_janela.destroy()
         exibir_interface_tabela(numero,arquivos_previos=arquivos_processados)
+        
     def voltar():
         nova_janela.destroy()
         janela_selecao_projeto()

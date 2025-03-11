@@ -10,7 +10,6 @@ GRUPOS_EXT = {
 }
 
 EXTENSOES_IGNORADAS = ['.jpg', '.jpeg', '.dwl', '.dwl2', '.png', '.ini']
-
 PASTA_ENTREGA_GLOBAL = None
 NOMENCLATURA_GLOBAL = None
 NUM_PROJETO_GLOBAL = None

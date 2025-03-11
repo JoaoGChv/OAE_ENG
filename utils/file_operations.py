@@ -20,6 +20,7 @@ def listar_arquivos_no_diretorio(diretorio):
             dmod_ts = os.path.getmtime(cam)
             dmod = datetime.datetime.fromtimestamp(dmod_ts).strftime("%d/%m/%Y %H:%M")
             saida.append((rv, a, tam, cam, dmod))
+            
     return saida
 
 def carregar_ultimo_diretorio():
