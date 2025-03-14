@@ -172,6 +172,7 @@ def Disciplinas_Detalhes_Projeto(numero,caminho):
             mod_time=datetime.fromtimestamp(os.path.getmtime(full_path)).strftime("%d/%m/%Y %H:%M")
             disciplinas.append((item,mod_time,"Pasta","--"))
     for disciplina in disciplinas: tree.insert("",tk.END,values=disciplina)
+        
     def confirmar_selecao_arquivos():
         selecionados=tree.selection()
         if not selecionados:
@@ -322,6 +323,7 @@ def exibir_interface_tabela(numero,arquivos_previos=None,caminho_projeto=None):
         if selecionados:
             for item in selecionados: tabela.delete(item)
         else: messagebox.showinfo("Informação","Nenhum item selecionado.")
+            
     def voltar():
         janela.destroy()
         Disciplinas_Detalhes_Projeto(numero,caminho_projeto if caminho_projeto else "")
@@ -446,6 +448,7 @@ def tela_analise_nomenclatura(lista_arquivos):
         else:
             janela.destroy()
             tela_verificacao_revisao(lista_arquivos)
+            
     def voltar():
         janela.destroy()
         exibir_interface_tabela("467",lista_arquivos)
@@ -469,9 +472,11 @@ def tela_verificacao_revisao(lista_arquivos):
     tree_obsoletos.pack(fill=tk.BOTH,expand=True,padx=10,pady=5)
     tree_obsoletos.heading("Nome do Arquivo",text="Nome do Arquivo");tree_obsoletos.heading("Revisão",text="Revisão")
     for arq in arquivos_obsoletos: tree_obsoletos.insert("",tk.END,values=(arq["Nome do Arquivo"],arq["Revisão"]))
+        
     def voltar():
         janela.destroy()
         tela_analise_nomenclatura(lista_arquivos)
+        
     def confirmar():
         messagebox.showinfo("Confirmação","Arquivos revisados e obsoletos identificados com sucesso.")
         pasta_revisados,pasta_obsoletos=criar_pastas_organizacao()
