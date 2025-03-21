@@ -372,8 +372,8 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
     lbl_projetos.pack(fill=tk.X, pady=5)
 
     lst_projetos = tk.Listbox(barra_lateral, height=5, bg="#ecf0f1", font=("Helvetica", 9))
-    lst_projetos.pack(fill=tk.X, padx=10, pady=5)
-    lst_projetos.insert(tk.END, "OAE-467 - PETER-KD-ENG")
+    lst_projetos.pack(fill=tk.X, padx=10, pady=5, anchor="center")
+    lst_projetos.insert(tk.END, "Projeto ", numero)
 
     lbl_membros = tk.Label(barra_lateral, text="MEMBROS", font=("Helvetica", 10, "bold"), bg="#34495e", fg="white", anchor="w", padx=10)
     lbl_membros.pack(fill=tk.X, pady=5)
