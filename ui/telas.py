@@ -13,6 +13,8 @@ ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
 PADROES_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\ui\padrões.json"
 CONFIG_NOMENCLATURA_JSON = "config_nomenclatura.json"
+
+# Mantemos as regras como no original.
 NOMENCLATURA_RULES = {
     "Status": ["E", "C", "P", "A", "R"],
     "Fase": ["PE", "AP", "EX"],
@@ -241,7 +243,6 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
         valores = tree.item(selecionados[0])["values"]
         disciplina_nome = valores[0]
 
-        # Monta caminho da disciplina
         pasta_disciplina = os.path.join(disciplinas_path, disciplina_nome)
         if not os.path.isdir(pasta_disciplina):
             messagebox.showerror("Erro", f"A pasta da disciplina '{pasta_disciplina}' não foi encontrada.")
@@ -254,18 +255,15 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
         def normalize(n):
             return n.lower().replace(" ", "").replace("-", "").replace("_", "").replace(".", "")
 
-        # Verifica todas as subpastas da disciplina para tentar achar "1.ENTREGAS"
         for folder in os.listdir(pasta_disciplina):
             if normalize(folder) == normalize(expected_folder):
                 match_entrega = folder
                 break
 
-        # Se mesmo assim não achou, encerra
         if not match_entrega:
             messagebox.showerror("Erro", f"A pasta de entrega '{expected_folder}' não foi encontrada.")
             return
 
-        # Constroi o caminho final
         pasta_entrega = os.path.join(pasta_disciplina, match_entrega)
         if not os.path.isdir(pasta_entrega):
             messagebox.showerror("Erro", f"A pasta de entrega '{pasta_entrega}' não pôde ser acessada.")
@@ -313,8 +311,11 @@ def carregar_json(filepath: str) -> Dict[str, Any]:
         return {}
 
 def salvar_json(filepath: str, data: Dict[str, Any]):
-    with open(filepath, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
+    try:
+        with open(filepath, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+    except Exception as e:
+        messagebox.showerror("Erro de Salvamento", f"Ocorreu um erro ao salvar o arquivo JSON:\n{e}")
 
 def identificar_numero_arquivo(partes):
     elementos_relevantes = partes[5:]
@@ -323,36 +324,72 @@ def identificar_numero_arquivo(partes):
             return parte
     return ""
 
+# Adicionamos os 14 campos. Manteremos a lógica atual, mas criamos chaves para cada um.
 def extrair_dados_arquivo(nome_arquivo):
     nome_base, extensao = os.path.splitext(nome_arquivo)
     partes = nome_base.split('-')
     try:
+        # Separar conjunto e nº do documento (ex: G.001)
+        conjunto_raw = partes[7] if len(partes) > 7 else ""
+        if '.' in conjunto_raw:
+            conjunto_split = conjunto_raw.split('.')
+            conjunto = conjunto_split[0]
+            numero_documento = conjunto_split[1]
+        else:
+            conjunto = conjunto_raw
+            numero_documento = ""
+
         dados = {
             "Status": partes[0] if len(partes) > 0 else "",
+            "Cliente": partes[1] if len(partes) > 1 else "",
+            "Nº do Projeto": partes[2] if len(partes) > 2 else "",
+            "Organização": partes[3] if len(partes) > 3 else "",
+            "Sigla da Disciplina": partes[4] if len(partes) > 4 else "",
+            "Fase": partes[5] if len(partes) > 5 else "",
+            "Tipo de Documento": partes[6] if len(partes) > 6 else "",
+
+            "Conjunto": conjunto,
+            
+            "Nº do Documento": numero_documento,
+
+            "Bloco": partes[8] if len(partes) > 8 else "",
+            "Pavimento": partes[9] if len(partes) > 9 else "",
+            "Subsistema": partes[10] if len(partes) > 10 else "",
+            "Tipo do Desenho": partes[11] if len(partes) > 11 else "",
+            "Revisão": partes[12] if len(partes) > 12 else "",
+            # Os campos abaixo fazem parte da estrutura já existente
             "Nome do Arquivo": nome_arquivo,
             "Extensão": extensao.strip('-'),
-            "Nº do Arquivo": identificar_numero_arquivo(partes),
-            "Fase": partes[5] if len(partes) > 5 else "",
-            "Tipo": partes[6] if len(partes) > 6 else "",
-            "Revisão": partes[-1].split('.')[0] if '.' in partes[-1] else partes[-1],
             "Modificação": datetime.now().strftime("%d/%m/%Y"),
-            "Modificado por": "Usuário",
-            "Entrega": f"Entrega.{partes[7].split('.')[0]}" if len(partes) > 7 else ""
+            "Modificado por": "Usuário"
         }
     except IndexError:
+        # Se ocorrer algum problema, preencha com strings vazias para não quebrar o fluxo.
         dados = {
             "Status": "",
-            "Nome do Arquivo": nome_arquivo,
-            "Extensão": "",
-            "Nº do Arquivo": "",
+            "Cliente": "",
+            "Nº do Projeto": "",
+            "Organização": "",
+            "Sigla da Disciplina": "",
             "Fase": "",
-            "Tipo": "",
+            "Tipo de Documento": "",
+            "Conjunto": "",
+            "Nº do Documento": "",
+            "Bloco": "",
+            "Pavimento": "",
+            "Subsistema": "",
+            "Tipo do Desenho": "",
             "Revisão": "",
+            "Nome do Arquivo": nome_arquivo,
+            "Extensão": extensao.strip('-'),
             "Modificação": datetime.now().strftime("%d/%m/%Y"),
-            "Modificado por": "Usuário",
-            "Entrega": ""
+            "Modificado por": "Usuário"
         }
     return dados
+
+
+def parts_if_exist(parts_list, index):
+    return parts_list[index] if len(parts_list) > index else ""
 
 def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None):
     janela = tk.Tk()
@@ -387,24 +424,19 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
         lista_arquivos = []
         for item in tabela.get_children():
             valores = tabela.item(item)["values"]
-            lista_arquivos.append({
-                "Status": valores[0],
-                "Nome do Arquivo": valores[1],
-                "Extensão": valores[2],
-                "Nº do Arquivo": valores[3],
-                "Fase": valores[4],
-                "Tipo": valores[5],
-                "Revisão": valores[6],
-                "Modificação": valores[7],
-                "Modificado por": valores[8],
-                "Entrega": valores[9],
-                "caminho": valores[10]
-            })
-
+            nome_arquivo = valores[1]
+            caminho = valores[10]
+            dados_extraidos = extrair_dados_arquivo(nome_arquivo)
+            dados_extraidos["caminho"] = caminho
+            lista_arquivos.append(dados_extraidos)
+                
         if not lista_arquivos:
             messagebox.showinfo("Aviso", "Nenhum arquivo adicionado para análise.")
         else:
             janela.destroy()
+            # Enviamos a lista_arquivos para a tela de análise.
+            # Vamos converter para o novo formato (com 14 campos).
+            # Mas, como parte do enunciado, manteremos a mesma transição e adaptaremos no "tela_analise_nomenclatura".
             tela_analise_nomenclatura(lista_arquivos)
 
     lbl_instrucao = tk.Label(conteudo_principal, text="Adicionar Arquivos para Entrega", font=("Helvetica", 15, "bold"), anchor="w")
@@ -415,6 +447,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
 
     ttk.Button(frm_botoes, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura).pack(side=tk.LEFT, padx=5)
 
+    # Campos originais, mas iremos manter por compatibilidade.
     cols = [
         "Status", "Nome do Arquivo", "Extensão", "Nº do Arquivo",
         "Fase", "Tipo", "Revisão", "Modificação", "Modificado por", "Entrega", "caminho"
@@ -438,16 +471,16 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
     if arquivos_previos:
         for dados_extraidos in arquivos_previos:
             tabela.insert("", tk.END, values=(
-                dados_extraidos["Status"],
-                dados_extraidos["Nome do Arquivo"],
-                dados_extraidos["Extensão"],
-                dados_extraidos["Nº do Arquivo"],
-                dados_extraidos["Fase"],
-                dados_extraidos["Tipo"],
-                dados_extraidos["Revisão"],
-                dados_extraidos["Modificação"],
-                dados_extraidos["Modificado por"],
-                dados_extraidos["Entrega"],
+                dados_extraidos.get("Status", ""),
+                dados_extraidos.get("Nome do Arquivo", ""),
+                dados_extraidos.get("Extensão", ""),
+                dados_extraidos.get("Nº do Arquivo", ""),
+                dados_extraidos.get("Fase", ""),
+                dados_extraidos.get("Tipo", ""),
+                dados_extraidos.get("Revisão", ""),
+                dados_extraidos.get("Modificação", ""),
+                dados_extraidos.get("Modificado por", ""),
+                dados_extraidos.get("Entrega", ""),
                 dados_extraidos.get("caminho", "")
             ))
 
@@ -458,17 +491,17 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
             dados_extraidos = extrair_dados_arquivo(nome_arquivo)
             dados_extraidos["caminho"] = arquivo
             tabela.insert("", tk.END, values=(
-                dados_extraidos["Status"],
-                dados_extraidos["Nome do Arquivo"],
-                dados_extraidos["Extensão"],
-                dados_extraidos["Nº do Arquivo"],
-                dados_extraidos["Fase"],
-                dados_extraidos["Tipo"],
-                dados_extraidos["Revisão"],
-                dados_extraidos["Modificação"],
-                dados_extraidos["Modificado por"],
-                dados_extraidos["Entrega"],
-                dados_extraidos["caminho"]
+                dados_extraidos.get("Status", ""),
+                dados_extraidos.get("Nome do Arquivo", ""),
+                dados_extraidos.get("Extensão", ""),
+                dados_extraidos.get("Nº do Arquivo", ""),
+                dados_extraidos.get("Fase", ""),
+                dados_extraidos.get("Tipo", ""),
+                dados_extraidos.get("Revisão", ""),
+                dados_extraidos.get("Modificação", ""),
+                dados_extraidos.get("Modificado por", ""),
+                dados_extraidos.get("Entrega", ""),
+                dados_extraidos.get("caminho", "")
             ))
 
     def remover_arquivo():
@@ -496,6 +529,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None)
     ttk.Button(btn_frame2, text="Sair", command=janela.destroy).pack(side=tk.RIGHT, padx=5)
 
 def identificar_revisoes(lista_arquivos):
+    # Mantemos a lógica de identificação de revisões do código original.
     grupos = {}
     for arq in lista_arquivos:
         nome_base, _ = os.path.splitext(arq["Nome do Arquivo"])
@@ -511,13 +545,53 @@ def identificar_revisoes(lista_arquivos):
     arquivos_revisados = []
     arquivos_obsoletos = []
     for identificador, arquivos in grupos.items():
-        arquivos.sort(key=lambda x: int(x[0][1:]))
+        arquivos.sort(key=lambda x: int(x[0][1:]) if x[0][1:].isdigit() else 0)
         revisao_mais_recente = arquivos[-1][1]
         arquivos_revisados.append(revisao_mais_recente)
         arquivos_obsoletos.extend([a[1] for a in arquivos[:-1]])
     return arquivos_revisados, arquivos_obsoletos
 
+############################
+# TELA DE ANÁLISE DE NOMENCLATURA
+############################
 def tela_analise_nomenclatura(lista_arquivos):
+    # Vamos mapear a correspondência entre as chaves do dicionário e os rótulos amigáveis.
+    # Os 14 campos, na ordem do "extrair_dados_arquivo":
+    friendly_fields = [
+        ("Status", "Status"),
+        ("Cliente", "Cliente"),
+        ("Nº do Projeto", "Nº do Projeto"),
+        ("Organização", "Organização"),
+        ("Sigla da Disciplina", "Sigla da Disciplina"),
+        ("Fase do Projeto", "Fase do Projeto"),
+        ("Tipo do Documento", "Tipo do Documento"),
+        ("Conjunto", "Conjunto"),
+        ("Nº do Documento", "Nº do Documento"),
+        ("Bloco", "Bloco"),
+        ("Pavimento", "Pavimento"),
+        ("Subsistema", "Subsistema"),
+        ("Tipo do Desenho", "Tipo do Desenho"),
+        ("Revisão", "Revisão"),
+    ]
+
+    CAMPOS_NOMENCLATURA = [
+        "Status",
+        "Cliente",
+        "Nº do Projeto",
+        "Organização",
+        "Sigla da Disciplina",
+        "Fase",
+        "Tipo de Documento",
+        "Conjunto",
+        "Nº do Documento",
+        "Bloco",
+        "Pavimento",
+        "Subsistema",
+        "Tipo do Desenho",
+        "Revisão"
+    ]
+
+
     config_nomenclatura = carregar_config_nomenclatura()
     conf_revisao = config_nomenclatura.get("config_revisao", {})
     conf_valores = config_nomenclatura.get("config_valores", {})
@@ -563,6 +637,7 @@ def tela_analise_nomenclatura(lista_arquivos):
         render_cards()
 
     def validate_with_rules(campo, typed_value):
+        # Campo refere-se a "Status", "Fase", etc. Se houver alguma regra, consultamos NOMENCLATURA_RULES.
         if campo in NOMENCLATURA_RULES:
             if typed_value not in NOMENCLATURA_RULES[campo]:
                 return False
@@ -570,25 +645,47 @@ def tela_analise_nomenclatura(lista_arquivos):
 
     def validate_entry(entry_var, campo, error_label):
         typed_value = entry_var.get().strip()
+        # Se quisermos usar config_valores, poderíamos verificar:
         valor_certo = conf_valores.get(campo, {}).get("valor_aceito", "")
         msg_erro = conf_valores.get(campo, {}).get("mensagem_erro", "")
 
+        # Se valor_certo estiver definido e typed_value != valor_certo, erro
         if valor_certo and typed_value != valor_certo:
-            fields_in_error.add(campo)
-            error_label.config(text=msg_erro, fg="red")
+            fields_in_error.add((campo, entry_var))
+            error_label.config(text=msg_erro if msg_erro else "Valor não corresponde ao esperado.", fg="red")
             return
 
-        if not validate_with_rules(campo, typed_value):
-            fields_in_error.add(campo)
-            error_label.config(
-                text=f"O valor '{typed_value}' não consta em NOMENCLATURA_RULES para '{campo}'.",
-                fg="red"
-            )
+        # Checamos a regra geral do NOMENCLATURA_RULES
+        if not typed_value:
+            # Vazio é inválido, de acordo com a lógica do code original (bloqueia avanço).
+            fields_in_error.add((campo, error_label))
+            error_label.config(text="Campo obrigatório.", fg="red")
         else:
-            fields_in_error.discard(campo)
-            error_label.config(text="", fg="red")
+            # Verificamos se existe alguma restrição:
+            if not validate_with_rules(campo, typed_value):
+                fields_in_error.add((campo, entry_var))
+                error_label.config(
+                    text=f"O valor '{typed_value}' não consta em NOMENCLATURA_RULES para '{campo}'.",
+                    fg="red"
+                )
+            else:
+                # Se passou na validação, removemos do set de errors (caso estivesse).
+                fields_in_error.discard((campo, entry_var))
+                error_label.config(text="", fg="red")
+
+    # Converter a lista_arquivos anterior para o novo modelo de 14 campos,
+    # caso ainda não possua. Se já tiver, preserva.
+    def ensure_14_fields(arquivo):
+        # Já definimos a base. Se algum campo não existe, definimos vazio.
+        for field_key, _friendly in friendly_fields:
+            if field_key not in arquivo:
+                arquivo[field_key] = ""
+        return arquivo
+
+    lista_arquivos = [ensure_14_fields(arq) for arq in lista_arquivos]
 
     def render_cards():
+
         for widget in container.winfo_children():
             widget.destroy()
 
@@ -597,34 +694,35 @@ def tela_analise_nomenclatura(lista_arquivos):
             card_frame = tk.Frame(container, bd=1, relief=tk.RIDGE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
             card_frame.pack(padx=MARGIN_SIZE, pady=MARGIN_SIZE, fill=tk.X)
 
-            header_button = ttk.Button(card_frame, text=arq["Nome do Arquivo"], command=lambda cid=card_id: expand_or_collapse(cid))
+            # Usamos o campo "Nome do Arquivo" como título. Se não existir, fallback em "Status" ou algo assim.
+            titulo = arq.get("Nome do Arquivo", f"Arquivo {idx+1}")
+            header_button = ttk.Button(card_frame, text=titulo, command=lambda cid=card_id: expand_or_collapse(cid))
             header_button.pack(fill=tk.X)
 
             if card_id in expanded_cards:
                 detail_frame = tk.Frame(card_frame, bd=1, relief=tk.GROOVE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
                 detail_frame.pack(fill=tk.X)
 
-                campos = [
-                    ("Status", arq.get("Status", "")),
-                    ("Nome do Arquivo", arq.get("Nome do Arquivo", "")),
-                    ("Extensão", arq.get("Extensão", "")),
-                    ("Nº do Arquivo", arq.get("Nº do Arquivo", "")),
-                    ("Fase", arq.get("Fase", "")),
-                    ("Tipo", arq.get("Tipo", "")),
-                    ("Revisão", arq.get("Revisão", "")),
-                    ("Modificação", arq.get("Modificação", "")),
-                    ("Modificado por", arq.get("Modificado por", "")),
-                    ("Entrega", arq.get("Entrega", ""))
-                ]
-
-                row_max = 5
-                col_max = 2
+                # Exibiremos os 14 campos amigáveis numa grade.
+                row_max = 7  # 7 linhas
+                col_max = 2  # 2 colunas => total 14 posições
                 idx_campos = 0
 
-                for rr in range(row_max):
-                    for cc in range(col_max):
-                        if idx_campos < len(campos):
-                            nome_campo, valor_campo = campos[idx_campos]
+                CAMPOS_NOMENCLATURA = [
+                    "Status", "Cliente", "Nº do Projeto", "Organização", "Sigla da Disciplina",
+                    "Fase", "Tipo de Documento", "Conjunto", "Nº do Documento", "Bloco",
+                    "Pavimento", "Subsistema", "Tipo do Desenho", "Revisão"
+                ]
+
+                total_campos = len(CAMPOS_NOMENCLATURA)
+                linhas = (total_campos + 1) // 2  # duas colunas por linha
+
+                for rr in range(linhas):
+                    for cc in range(2):
+                        idx = rr * 2 + cc
+                        if idx < total_campos:
+                            nome_campo = CAMPOS_NOMENCLATURA[idx]
+                            valor_campo = arq.get(nome_campo, "")
                             c_frame = tk.Frame(detail_frame, bd=1, relief=tk.FLAT, bg="#ECE2E2")
                             c_frame.grid(row=rr, column=cc, padx=MARGIN_SIZE, pady=MARGIN_SIZE, sticky="nsew")
 
@@ -642,8 +740,6 @@ def tela_analise_nomenclatura(lista_arquivos):
                             val_entry.pack(fill=tk.X)
                             error_lbl.pack(anchor="w")
 
-                            idx_campos += 1
-
                 for rr in range(row_max):
                     detail_frame.rowconfigure(rr, weight=0)
                 for cc in range(col_max):
@@ -660,14 +756,16 @@ def tela_analise_nomenclatura(lista_arquivos):
     janela.after(100, ajustar_canvas)
 
     def avancar():
+        # Ao avançar, verificamos se há campos em erro. Se houver, não deixa prosseguir.
         if fields_in_error:
-            messagebox.showerror("Erro", "Existem campos com erro. Corrija antes de prosseguir.")
+            messagebox.showerror("Erro", "Existem campos obrigatórios vazios ou inválidos. Corrija antes de prosseguir.")
         else:
             janela.destroy()
             tela_verificacao_revisao(lista_arquivos)
 
     def voltar():
         janela.destroy()
+        # Retorna para a lista, se necessário
         exibir_interface_tabela("467", lista_arquivos)
 
     btn_frame = tk.Frame(janela)
@@ -678,6 +776,9 @@ def tela_analise_nomenclatura(lista_arquivos):
 
     janela.mainloop()
 
+############################
+# TELA DE VERIFICAÇÃO DE REVISÃO
+############################
 def tela_verificacao_revisao(lista_arquivos):
     arquivos_revisados, arquivos_obsoletos = identificar_revisoes(lista_arquivos)
 
@@ -697,7 +798,7 @@ def tela_verificacao_revisao(lista_arquivos):
     tree_revisados.heading("Revisão", text="Revisão")
 
     for arq in arquivos_revisados:
-        tree_revisados.insert("", tk.END, values=(arq["Nome do Arquivo"], arq["Revisão"]))
+        tree_revisados.insert("", tk.END, values=(arq.get("Nome do Arquivo", ""), arq.get("Revisão", "")))
 
     frame_obsoletos = tk.LabelFrame(janela, text="Arquivos Obsoletos")
     frame_obsoletos.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -708,7 +809,7 @@ def tela_verificacao_revisao(lista_arquivos):
     tree_obsoletos.heading("Revisão", text="Revisão")
 
     for arq in arquivos_obsoletos:
-        tree_obsoletos.insert("", tk.END, values=(arq["Nome do Arquivo"], arq["Revisão"]))
+        tree_obsoletos.insert("", tk.END, values=(arq.get("Nome do Arquivo", ""), arq.get("Revisão", "")))
 
     def voltar():
         janela.destroy()
@@ -727,7 +828,12 @@ def tela_verificacao_revisao(lista_arquivos):
     ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
     ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.RIGHT, padx=5)
 
+    # Como pedido, salvamos tudo em formato fixo (JSON).
+    # Vamos usar a mesma estrutura do code original.
+    salvar_json("saida_final_nomenclaturas.json", {"arquivos": lista_arquivos})
+
     janela.mainloop()
 
 if __name__ == "__main__":
-    exibir_interface_tabela()
+    # Mantido como no original, apenas chamando a interface principal.
+    exibir_interface_tabela("467")
