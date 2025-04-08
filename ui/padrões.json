@@ -1,8 +1,0 @@
-{
-    "padroes": [
-        ["E", "KD", "467", "OAE", "ELE", "PE", "DTE", "G.001", "BLH", "1PAV", "BSW", "PTB", "R01"],
-        ["P", "KD", "467", "OAE", "ELE", "PE", "MEM", "G.002", "BLH", "1PAV", "BSW", "PTB", "R02"],
-        ["C", "KD", "467", "OAE", "ELE", "PE", "DTE", "G.001", "BLH", "1PAV", "BSW", "PTB", "R04"],
-        ["A", "KD", "467", "OAE", "ELE", "PE", "DTE", "G.003", "BLH", "1PAV", "BSW", "PTB", "R03"]
-    ]
-}

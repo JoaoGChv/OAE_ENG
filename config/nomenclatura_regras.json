@@ -1,0 +1,97 @@
+{
+    "Status": {
+      "tipo": "fixo",
+      "valores_permitidos": ["E", "C", "P", "A", "R"],
+      "obrigatorio": true,
+      "descricao": "Status do documento (E=Em desenvolvimento, C=Compartilhado, P=Público, A=Arquivado, R=Reprovado)."
+    },
+    "Cliente": {
+      "tipo": "livre",
+      "obrigatorio": true,
+      "descricao": "Nome do cliente. Pode variar por projeto."
+    },
+    "N° do Projeto": {
+      "tipo": "mapeado_dinamico",
+      "valores_permitidos": ["411", "429", "467"], 
+      "obrigatorio": true,
+      "descricao": "Número do projeto (poderá ser ampliado depois)."
+    },
+    "Organização": {
+      "tipo": "fixo",
+      "valor_fixo": "OAE",
+      "obrigatorio": true,
+      "descricao": "Organização responsável (Oliveira Araújo Eng.)."
+    },
+    "Sigla da Disciplina": {
+      "tipo": "fixo",
+      "valores_permitidos": [
+        "ARQ","ELE","ECE","ESP","EIN","EPR","EUT","HID","HDR","HIN",
+        "SMT","CLI","ORÇ","SCO","OIM"
+      ],
+      "obrigatorio": true,
+      "descricao": "Disciplinas, conforme Tabela 10."
+    },
+    "Fase": {
+      "tipo": "fixo",
+      "valores_permitidos": ["AP","PE"],
+      "obrigatorio": true,
+      "descricao": "Fases do projeto (AP=Anteprojeto, PE=Projeto Executivo)."
+    },
+    "Tipo de Documento": {
+      "tipo": "fixo",
+      "valores_permitidos": [
+        "DTE","MEM","RLT","BIM","ART","LEG","TAP","BEP","CRO","MAN","LMT","REC"
+      ],
+      "obrigatorio": true,
+      "descricao": "Tipos de documento (Tabela 12)."
+    },
+    "Conjunto": {
+      "tipo": "fixo",
+      "valores_permitidos": ["X","ARQ","ENG","G"], 
+      "obrigatorio": true,
+      "descricao": "Grupo a que o arquivo pertence."
+    },
+    "N° do documento": {
+      "tipo": "sequencial",
+      "regex": "^\\d{3}$",
+      "obrigatorio": true,
+      "descricao": "Número sequencial do documento, 3 dígitos (Tabela 14)."
+    },
+    "Bloco": {
+      "tipo": "fixo",
+      "valores_permitidos": ["BLH","BLQ","BLA"],
+      "obrigatorio": false,
+      "descricao": "Bloco, atualmente sem definição formal."
+    },
+    "Pavimento": {
+      "tipo": "fixo",
+      "valores_permitidos": ["IMP","SUB","TER","COB"],
+      "obrigatorio": false,
+      "descricao": "Pavimento (implantação, subsolo, térreo, cobertura)."
+    },
+    "Subsistema": {
+      "tipo": "fixo",
+      "valores_permitidos": [
+        "AUB","ACS","ACX","ACV","HDA","HAG","HEG","HAP","HPI","HTE",
+        "SCO","SPR","SCM","SAV","SPT"
+      ],
+      "obrigatorio": false,
+      "descricao": "Subsistemas usados em cada disciplina."
+    },
+    "Tipo do desenho": {
+      "tipo": "fixo",
+      "valores_permitidos": [
+        "COR","DET","PTB","DIA","VIS","ISO","FOR","LAY","TEC","AML",
+        "ALV","REV","PIL","VIG","LAJ","ESC","RES","BLO","SAP","TUB","ELE"
+      ],
+      "obrigatorio": false,
+      "descricao": "Conteúdo do arquivo (Tabela 17)."
+    },
+    "Revisão": {
+      "tipo": "regex",
+      "regex": "^R\\d{2}$",
+      "obrigatorio": true,
+      "descricao": "Revisão do arquivo. Ex: R01, R02."
+    }
+  }
+  
