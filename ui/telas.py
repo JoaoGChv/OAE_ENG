@@ -14,6 +14,9 @@ PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
 NOMENCLATURA_REGRAS_JSON = "config/nomenclatura_regras.json"
+JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao")
+
+EntregaInfo = tuple[str, str, str]  # (pasta_entrega_com_indice, Revisados, Obsoletos)
 
 def carregar_regras_nomenclatura():
     if not os.path.exists(NOMENCLATURA_REGRAS_JSON):
@@ -27,6 +30,44 @@ def carregar_regras_nomenclatura():
     except json.JSONDecodeError as e:
         print("[ERRO] Falha ao ler JSON de regras:", e)
         return {}
+    
+def caminho_contador(projeto_num: str) -> str:
+    os.makedirs(JSON_CONTADORES_DIR, exist_ok=True)
+    return os.path.join(JSON_CONTADORES_DIR, f"contador_entregas_{projeto_num}.json")
+
+def obter_proximo_indice(projeto_num: str) -> int:
+    fp = caminho_contador(projeto_num)
+    data = carregar_json(fp) or {"proximo": 1}
+    return data["proximo"]
+
+def incrementar_indice(projeto_num: str):
+    fp = caminho_contador(projeto_num)
+    data = carregar_json(fp) or {"proximo": 1}
+    data["proximo"] += 1
+    salvar_json(fp, data)
+
+def carregar_historico_entregas(projeto_num: str) -> dict:
+    fp = caminho_contador(projeto_num)
+    if os.path.exists(fp):
+        with open(fp, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+    else:
+        dados = {}
+
+    # ---- garante as chaves obrigatórias -----------------------------
+    dados.setdefault("proximo", 1)
+    dados.setdefault("entregas", [])
+    # -----------------------------------------------------------------
+    return dados
+
+def salvar_historico_entregas(projeto_num: str, data: dict) -> None:
+    fp = caminho_contador(projeto_num)
+    try:
+        with open(fp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except Exception as err:
+        messagebox.showerror("Erro", f"Falha ao salvar histórico de entregas:\n{err}")
+        raise SystemExit
 
 def carregar_projetos():
     if not os.path.exists(PROJETOS_JSON):
@@ -65,18 +106,26 @@ def atualizar_historico(lista_arquivos, c=HISTORICO_JSON):
         json.dump(h, f, indent=4, ensure_ascii=False)
     return h
 
-def criar_pastas_organizacao(base_dir):
-    if not base_dir or not os.path.exists(base_dir):
-        messagebox.showerror("Erro", f"Caminho da pasta de entregas inválido: {base_dir}")
-        return None, None
-    p_rev = os.path.join(base_dir, "Revisados")
-    if not os.path.exists(p_rev):
-        os.makedirs(p_rev)
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    p_obs = os.path.join(base_dir, f"Obsoleto_{ts}")
-    if not os.path.exists(p_obs):
-        os.makedirs(p_obs)
-    return p_rev, p_obs
+def criar_pasta_entrega(base_1entregas: str, fase: str, indice: int) -> EntregaInfo | tuple[None, None, None]:
+    nome_pasta = f"{indice:02d}.{fase}.ENT-{indice:02d}-ENTREGUE"
+    entrega_dir = os.path.join(base_1entregas, nome_pasta)
+
+    if os.path.exists(entrega_dir):
+        messagebox.showerror("Erro", f"Pasta '{nome_pasta}' já existe. Processo abortado.")
+        return None, None, None  # sinaliza erro
+
+    try:
+        os.makedirs(entrega_dir)
+        revisados_dir = os.path.join(entrega_dir, "Revisados")
+        os.makedirs(revisados_dir)
+        obsoletos_dir = os.path.join(
+            entrega_dir, f"Obsoleto_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        )
+        os.makedirs(obsoletos_dir)
+        return entrega_dir, revisados_dir, obsoletos_dir
+    except Exception as e:
+        messagebox.showerror("Erro", f"Falha ao criar pastas de entrega:\n{e}")
+        return None, None, None
 
 def mover_arquivos(lista_arquivos, dst):
     for arq in lista_arquivos:
@@ -128,6 +177,7 @@ def janela_selecao_projeto():
         nm = os.path.basename(c_full)
         p_conv.append((num, nm, c_full))
     sel = {"numero": None, "caminho": None}
+
     def filtrar(*args):
         t = entrada.get().lower()
         tree.delete(*tree.get_children())
@@ -137,6 +187,7 @@ def janela_selecao_projeto():
         all_iid = tree.get_children()
         if len(all_iid) == 1:
             tree.selection_set(all_iid[0])
+
     def confirmar():
         si = tree.selection()
         if not si:
@@ -196,6 +247,7 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
             disc.append((it, mt, "Pasta", "--"))
     for d in disc:
         tree.insert("", tk.END, values=d)
+
     def confirmar_selecao_arquivos():
         s = tree.selection()
         if not s:
@@ -236,6 +288,7 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
             return
         nj.destroy()
         exibir_interface_tabela(numero, arquivos_previos=proc, caminho_projeto=caminho, pasta_entrega=p_ent)
+
     def voltar():
         nj.destroy()
         janela_selecao_projeto()
@@ -336,6 +389,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
     bar_l.pack_propagate(False)
     cp = tk.Frame(fpr)
     cp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
     def fazer_analise_nomenclatura():
         la = []
         for it in tabela.get_children():
@@ -374,6 +428,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
                 d_ext.get("N° do Arquivo",""), d_ext.get("Fase",""), d_ext.get("Tipo de Documento",""),
                 d_ext.get("Revisão",""), d_ext.get("Modificação",""), d_ext.get("Modificado por",""), "", d_ext.get("caminho","")
             ))
+            
     def adicionar_arquivos():
         ar = filedialog.askopenfilenames(title="Selecione arquivos")
         for a in ar:
@@ -385,6 +440,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
                 dx.get("N° do Arquivo",""), dx.get("Fase",""), dx.get("Tipo de Documento",""),
                 dx.get("Revisão",""), dx.get("Modificação",""), dx.get("Modificado por",""), "", dx.get("caminho","")
             ))
+
     def remover_arquivo():
         s = tabela.selection()
         if s:
@@ -392,6 +448,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
                 tabela.delete(i)
         else:
             messagebox.showinfo("Informação", "Nenhum item selecionado.")
+
     def voltar():
         j.destroy()
         Disciplinas_Detalhes_Projeto(numero, caminho_projeto if caminho_projeto else "")
@@ -440,6 +497,7 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
     cnv.configure(yscrollcommand=sb.set)
     cont = tk.Frame(cnv, bg="#ECE2E2")
     c_id = cnv.create_window((0,0), window=cont, anchor="n")
+
     def on_conf(event):
         cnv.configure(scrollregion=cnv.bbox("all"))
         w = event.width
@@ -448,12 +506,14 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
     fields_in_error = set()
     expanded_cards = set()
     CMPS = ["Status","Cliente","N° do Projeto","Organização","Sigla da Disciplina","Fase","Tipo de Documento","Conjunto","N° do Documento","Bloco","Pavimento","Subsistema","Tipo do Desenho","Revisão"]
+    
     def expand_or_collapse(cid):
         if cid in expanded_cards:
             expanded_cards.remove(cid)
         else:
             expanded_cards.add(cid)
         render_cards()
+
     def validate_with_json_rules(campo, val):
         if campo not in rnom: return (True,"")
         rg = rnom[campo]
@@ -472,6 +532,7 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
             if not re.match(pt,val):
                 return (False,f"O valor '{val}' não atende ao regex: {pt}")
         return (True,"")
+    
     def validate_entry(ev, campo, lbl_e):
         tv = ev.get().strip()
         iv, me = validate_with_json_rules(campo, tv)
@@ -482,6 +543,7 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
             lbl_e.config(text="", fg="red")
             if (campo,lbl_e) in fields_in_error:
                 fields_in_error.remove((campo,lbl_e))
+
     def render_cards():
         for wdg in cont.winfo_children():
             wdg.destroy()
@@ -530,6 +592,7 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
         cnv.itemconfig(c_id, width=w_at)
         cnv.configure(scrollregion=cnv.bbox("all"))
     j.after(100, ajustar_canvas)
+
     def avancar():
         if fields_in_error:
             messagebox.showerror("Erro", "Existem campos vazios ou inválidos. Corrija antes de prosseguir.")
@@ -629,23 +692,43 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
     tr_o.heading("Revisão", text="Revisão")
     for a in aobs:
         tr_o.insert("", tk.END, values=(a["Nome do Arquivo"], a["Revisão"]))
+
     def voltar():
         j.destroy()
         tela_analise_nomenclatura(lista_arquivos, pasta_entrega=pasta_entrega)
+
     def confirmar():
-        ds = {"arquivos_revisados": arrv, "arquivos_obsoletos": aobs}
-        try:
-            salvar_json("resultado_revisao.json", ds)
-        except:
-            messagebox.showerror("Erro", "Falha ao salvar dados em JSON.")
-        p_rev, p_obs = criar_pastas_organizacao(pasta_entrega)
+        projeto_num = lista_arquivos[0]["N° do Projeto"] or "000"
+        fase_projeto = lista_arquivos[0]["Fase"] or "SN"
+
+        hist = carregar_historico_entregas(projeto_num)
+        indice = hist["proximo"]  
+        
+        ent_dir, p_rev, p_obs = criar_pasta_entrega(pasta_entrega, fase_projeto, indice)
+        if not ent_dir:  
+            return
         mover_arquivos(arrv, p_rev)
         mover_obsoletos(aobs, p_obs)
         try:
-            cp = criar_arquivo_excel(p_rev, [], arrv, aobs)
-            messagebox.showinfo("Planilha Gerada", f"GRD salva com sucesso:\n{cp}")
+            caminho_grd = criar_arquivo_excel(p_rev, [], arrv, aobs)
+            messagebox.showinfo("Planilha Gerada", f"GRD salva:\n{caminho_grd}")
         except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao gerar a planilha GRD:\n{e}")
+            messagebox.showerror("Erro", f"Falha ao gerar GRD:\n{e}")
+            return
+        registro = {
+            "indice"       : indice,
+            "fase"         : fase_projeto,
+            "pasta_entrega": ent_dir,
+            "data_criacao" : datetime.now().isoformat(timespec="seconds"),
+            "revisados"    : [a["Nome do Arquivo"] for a in arrv],
+            "obsoletos"    : [a["Nome do Arquivo"] for a in aobs],
+            "grd"          : caminho_grd
+        }
+        hist["entregas"].append(registro)
+        hist["proximo"] = indice + 1
+        salvar_historico_entregas(projeto_num, hist)
+        salvar_json("resultado_revisao.json",
+                    {"arquivos_revisados": arrv, "arquivos_obsoletos": aobs})
         messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
         j.destroy()
     bf = tk.Frame(j)
