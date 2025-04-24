@@ -53,11 +53,8 @@ def carregar_historico_entregas(projeto_num: str) -> dict:
             dados = json.load(f)
     else:
         dados = {}
-
-    # ---- garante as chaves obrigatórias -----------------------------
     dados.setdefault("proximo", 1)
     dados.setdefault("entregas", [])
-    # -----------------------------------------------------------------
     return dados
 
 def salvar_historico_entregas(projeto_num: str, data: dict) -> None:
@@ -739,3 +736,4 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
 
 if __name__ == "__main__":
     exibir_interface_tabela("467")
+
