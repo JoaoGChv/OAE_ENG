@@ -1,5 +1,8 @@
-import os, tkinter as tk, json, shutil, sys
+from __future__ import annotations
+from pathlib import Path
+from typing import Dict, Optional
 from tkinter import ttk, messagebox, filedialog
+import os, tkinter as tk, json, shutil, sys, hashlib
 from datetime import datetime
 import ttkbootstrap
 from ttkbootstrap.style import Style
@@ -16,16 +19,134 @@ HISTORICO_JSON = "historico_arquivos.json"
 NOMENCLATURA_REGRAS_JSON = "config/nomenclatura_regras.json"
 JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao")
 
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,                         # DEBUG, INFO, WARNING…
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%d/%m/%Y %H:%M:%S",
+)
+
 EntregaInfo = tuple[str, str, str]  # (pasta_entrega_com_indice, Revisados, Obsoletos)
+
+def _hash_file(path: Path, buf: int = 8192) -> str:
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while chunk := f.read(buf):
+            h.update(chunk)
+    return h.hexdigest()
+
+def _e_pasta_entrega(p: Path) -> bool:
+    if not p.is_dir():
+        return False
+    if not p.name.startswith("Entrega_"):
+        return False
+    if p.name.endswith("_OBS"):
+        return False
+    num = p.name.split("_")[1]
+    return num.isdigit()
+
+def obter_entrega_anterior(pasta_entregas: Path) -> Optional[Path]:
+    entregas = sorted(
+        [p for p in pasta_entregas.iterdir()
+         if p.is_dir()
+         and p.name.startswith("Entrega_")
+         and p.name.split("_")[1][:2].isdigit()
+         and not p.name.endswith("_OBS")],
+        key=lambda p: int(p.name.split("_")[1][:2])
+    )
+    return entregas[-1] if entregas else None
+
+def listar_arquivos_entrega(pasta_entrega: Path) -> list[Path]:
+    return [p for p in pasta_entrega.iterdir() if p.is_file()]
+
+def comparar_arquivos(pasta_atual: Path, pasta_anterior: Optional[Path]) -> dict:
+    atual = {p.name: p for p in listar_arquivos_entrega(pasta_atual)}
+    anterior = {p.name: p for p in listar_arquivos_entrega(pasta_anterior)} if pasta_anterior else {}
+    r: Dict[str, dict] = {}
+
+    for nome, p in atual.items():
+        if nome == "_controle_entrega.json":
+            continue
+        if nome in anterior:
+            r[nome] = {"status": "nao_modificado" if _hash_file(p) == _hash_file(anterior[nome])
+                       else "modificado",
+                       "versao_anterior": str(anterior[nome])}
+        else:
+            r[nome] = {"status": "novo"}
+
+    for nome, p_old in anterior.items():
+        if nome not in r and nome != "_controle_entrega.json":
+            r[nome] = {"status": "removido", "versao_anterior": str(p_old)}
+    return r
+
+def marcar_pasta_obsoleta(pasta: Path) -> Path:
+    base = pasta.with_name(pasta.name + "_OBS")
+    idx = 1
+    destino = base
+    while destino.exists():
+        idx += 1
+        destino = pasta.with_name(f"{pasta.name}_OBS{idx}")
+    pasta.rename(destino)
+    logging.info("Pasta %s ➜ %s (obsoleta)", pasta.name, destino.name)
+    return destino
+
+def criar_nova_pasta_entrega(pasta_entregas: Path) -> Path:
+    ultima = obter_entrega_anterior(pasta_entregas)
+    prox = 1 if not ultima else int(ultima.name.split("_")[1]) + 1
+    nova = pasta_entregas / f"Entrega_{prox:02d}"
+    nova.mkdir(parents=True, exist_ok=False)
+    return nova
+
+def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
+    with (nova_pasta / "_controle_entrega.json").open("w", encoding="utf-8") as f:
+        json.dump(comparacao, f, indent=4, ensure_ascii=False)
+
+def processar_entrega_arquivos(arquivos: list[Path], pasta_entregas: Path) -> Path:
+    pasta_entregas = pasta_entregas.resolve()
+    logging.info("⇢ Pasta 1.ENTREGAS: %s", pasta_entregas)
+
+    # 1) localiza e marca a entrega ativa como obsoleta (se houver)
+    entrega_ativa = obter_entrega_anterior(pasta_entregas)
+    if entrega_ativa:
+        marcar_pasta_obsoleta(entrega_ativa)
+
+    # 2) calcula número da nova entrega após a renomeação anterior
+    anterior = obter_entrega_anterior(pasta_entregas)       # pode ser None agora
+    prox_num = 1 if not anterior else int(anterior.name.split("_")[1][:2]) + 1
+    nova_pasta = pasta_entregas / f"Entrega_{prox_num:02d}"
+    logging.debug("Nova entrega → %s", nova_pasta)
+
+    try:
+        nova_pasta.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        logging.error("Pasta %s já existe — verifique contagem!", nova_pasta)
+        raise
+    except Exception as e:
+        logging.error("Não foi possível criar %s: %s", nova_pasta, e)
+        raise
+
+    # 3) monta dicionário de comparação vs. entrega anterior (se existir)
+    comparacao = comparar_arquivos(nova_pasta, anterior)  # nova está vazia mas ok
+
+    # 4) copia arquivos escolhidos
+    for src in arquivos:
+        dst = nova_pasta / src.name
+        shutil.copy2(src, dst)
+        logging.debug("Copiado %s → %s", src.name, dst)
+
+    # 5) gera JSON de controle
+    gerar_arquivo_controle(nova_pasta, comparacao)
+    logging.info("✔ Entrega %s concluída com %d itens", nova_pasta.name, len(comparacao))
+    return nova_pasta
 
 def carregar_regras_nomenclatura():
     if not os.path.exists(NOMENCLATURA_REGRAS_JSON):
-        print("[ERRO] Arquivo de regras não encontrado:", NOMENCLATURA_REGRAS_JSON)
+        print("[ERRO] Arquivo de regras não encontrado:")
         return {}
     try:
         with open(NOMENCLATURA_REGRAS_JSON, "r", encoding="utf-8") as f:
             r = json.load(f)
-            print("[DEBUG] Regras carregadas:", r)
             return r
     except json.JSONDecodeError as e:
         print("[ERRO] Falha ao ler JSON de regras:", e)
@@ -128,6 +249,12 @@ def mover_arquivos(lista_arquivos, dst):
     for arq in lista_arquivos:
         o = arq.get("caminho")
         n = arq.get("Nome do Arquivo")
+        r = logging.debug("arquivo movidos", mover_arquivos)
+        if not r:
+            messagebox.showerror("Erro", f"O arquivo '{n}' não foi encontrado.")
+            continue
+
+
         if not o:
             messagebox.showerror("Erro", f"O caminho para '{n}' não foi encontrado.")
             continue
@@ -695,39 +822,23 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
         tela_analise_nomenclatura(lista_arquivos, pasta_entrega=pasta_entrega)
 
     def confirmar():
-        projeto_num = lista_arquivos[0]["N° do Projeto"] or "000"
-        fase_projeto = lista_arquivos[0]["Fase"] or "SN"
-
-        hist = carregar_historico_entregas(projeto_num)
-        indice = hist["proximo"]  
-        
-        ent_dir, p_rev, p_obs = criar_pasta_entrega(pasta_entrega, fase_projeto, indice)
-        if not ent_dir:  
-            return
-        mover_arquivos(arrv, p_rev)
-        mover_obsoletos(aobs, p_obs)
         try:
-            caminho_grd = criar_arquivo_excel(p_rev, [], arrv, aobs)
-            messagebox.showinfo("Planilha Gerada", f"GRD salva:\n{caminho_grd}")
+            # lista completa de Paths escolhidos (revisados + obsoletos)
+            caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
+            pasta_raiz_entregas = Path(pasta_entrega)          # "1.ENTREGAS"
+
+            nova = processar_entrega_arquivos(caminhos, pasta_raiz_entregas)
+
+            messagebox.showinfo(
+                "Sucesso",
+                f"Nova entrega criada:\n{nova}\n"
+                "_controle_entrega.json gerado com o status dos arquivos."
+            )
+            j.destroy()
         except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao gerar GRD:\n{e}")
-            return
-        registro = {
-            "indice"       : indice,
-            "fase"         : fase_projeto,
-            "pasta_entrega": ent_dir,
-            "data_criacao" : datetime.now().isoformat(timespec="seconds"),
-            "revisados"    : [a["Nome do Arquivo"] for a in arrv],
-            "obsoletos"    : [a["Nome do Arquivo"] for a in aobs],
-            "grd"          : caminho_grd
-        }
-        hist["entregas"].append(registro)
-        hist["proximo"] = indice + 1
-        salvar_historico_entregas(projeto_num, hist)
-        salvar_json("resultado_revisao.json",
-                    {"arquivos_revisados": arrv, "arquivos_obsoletos": aobs})
-        messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
-        j.destroy()
+            messagebox.showerror("Erro", f"Falha ao processar entrega:\n{e}")
+
+    # Botões
     bf = tk.Frame(j)
     bf.pack(side="bottom", anchor="e", pady=5, padx=10)
     ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)

@@ -1,7 +1,7 @@
 {
     "arquivos_revisados": [
         {
-            "Status": "E",
+            "Status": "P",
             "Cliente": "PETER_BAL",
             "N° do Projeto": "991",
             "Organização": "OAE",
@@ -9,61 +9,18 @@
             "Fase": "EX",
             "Tipo de Documento": "DTE",
             "Conjunto": "G",
-            "N° do Documento": "002",
+            "N° do Documento": "001",
             "Bloco": "IMP",
             "Pavimento": "TER",
             "Subsistema": "LAY",
             "Tipo do Desenho": "PTB",
             "Revisão": "R03",
-            "Nome do Arquivo": "E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R03.pdf",
+            "Nome do Arquivo": "P-PETER_BAL-991-OAE-ARQ-EX-DTE-G.001-IMP-TER-LAY-PTB-R03.pdf",
             "Extensão": ".pdf",
-            "Modificação": "23/04/2025",
+            "Modificação": "09/05/2025",
             "Modificado por": "Usuário",
-            "caminho": "C:/Users/DEV/Downloads/Base de dados_Teste/PROJ 991/E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R03.pdf"
+            "caminho": "G:/Drives compartilhados/OAE-991 - PETER BAL/3 Desenvolvimento/SCO/1.ENTREGAS/05.EX.ENT-05-ENTREGUE/Revisados/P-PETER_BAL-991-OAE-ARQ-EX-DTE-G.001-IMP-TER-LAY-PTB-R03.pdf"
         }
     ],
-    "arquivos_obsoletos": [
-        {
-            "Status": "E",
-            "Cliente": "PETER_BAL",
-            "N° do Projeto": "991",
-            "Organização": "OAE",
-            "Sigla da Disciplina": "ARQ",
-            "Fase": "EX",
-            "Tipo de Documento": "DTE",
-            "Conjunto": "G",
-            "N° do Documento": "002",
-            "Bloco": "IMP",
-            "Pavimento": "TER",
-            "Subsistema": "LAY",
-            "Tipo do Desenho": "PTB",
-            "Revisão": "R01",
-            "Nome do Arquivo": "E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R01.pdf",
-            "Extensão": ".pdf",
-            "Modificação": "23/04/2025",
-            "Modificado por": "Usuário",
-            "caminho": "C:/Users/DEV/Downloads/Base de dados_Teste/PROJ 991/E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R01.pdf"
-        },
-        {
-            "Status": "E",
-            "Cliente": "PETER_BAL",
-            "N° do Projeto": "991",
-            "Organização": "OAE",
-            "Sigla da Disciplina": "ARQ",
-            "Fase": "EX",
-            "Tipo de Documento": "DTE",
-            "Conjunto": "G",
-            "N° do Documento": "002",
-            "Bloco": "IMP",
-            "Pavimento": "TER",
-            "Subsistema": "LAY",
-            "Tipo do Desenho": "PTB",
-            "Revisão": "R02",
-            "Nome do Arquivo": "E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R02.pdf",
-            "Extensão": ".pdf",
-            "Modificação": "23/04/2025",
-            "Modificado por": "Usuário",
-            "caminho": "C:/Users/DEV/Downloads/Base de dados_Teste/PROJ 991/E-PETER_BAL-991-OAE-ARQ-EX-DTE-G.002-IMP-TER-LAY-PTB-R02.pdf"
-        }
-    ]
+    "arquivos_obsoletos": []
 }
