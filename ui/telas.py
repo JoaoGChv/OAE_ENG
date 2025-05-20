@@ -112,10 +112,17 @@ def processar_entrega_arquivos(arquivos: list[Path], pasta_entregas: Path) -> Pa
         marcar_pasta_obsoleta(entrega_ativa)
 
     # 2) calcula número da nova entrega após a renomeação anterior
-    anterior = obter_entrega_anterior(pasta_entregas)       # pode ser None agora
-    prox_num = 1 if not anterior else int(anterior.name.split("_")[1][:2]) + 1
+    nums = []
+    for p in pasta_entregas.iterdir():
+        if p.is_dir() and p.name.startswith("Entrega_"):
+            parte = p.name.split("_")[1]      # "01", "02OBS", ...
+            dig = ''.join(ch for ch in parte if ch.isdigit())
+            if dig.isdigit():
+                nums.append(int(dig))
+    anterior = obter_entrega_anterior(pasta_entregas)
+    prox_num = (max(nums) + 1) if nums else 1
     nova_pasta = pasta_entregas / f"Entrega_{prox_num:02d}"
-    logging.debug("Nova entrega → %s", nova_pasta)
+    logging.debug("Nova entrega → %s", nova_pasta)   
 
     try:
         nova_pasta.mkdir(parents=True, exist_ok=False)
@@ -847,4 +854,3 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
 
 if __name__ == "__main__":
     exibir_interface_tabela("467")
-
