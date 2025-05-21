@@ -22,12 +22,12 @@ JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joao
 import logging
 
 logging.basicConfig(
-    level=logging.DEBUG,                         # DEBUG, INFO, WARNING…
+    level=logging.DEBUG,                  
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%d/%m/%Y %H:%M:%S",
 )
 
-EntregaInfo = tuple[str, str, str]  # (pasta_entrega_com_indice, Revisados, Obsoletos)
+EntregaInfo = tuple[str, str, str] 
 
 def _hash_file(path: Path, buf: int = 8192) -> str:
     h = hashlib.md5()
@@ -787,8 +787,7 @@ def criar_arquivo_excel(diretorio, arquivos_novos, arquivos_revisados, arquivos_
                 "Arquivo Revisado" in cell.value or
                 "Arquivo Novo" in cell.value or
                 "Arquivo Obsoleto" in cell.value or
-                cell.value in ["Nome do arquivo","Revisão","Data de modificação"]
-            ):
+                cell.value in ["Nome do arquivo","Revisão","Data de modificação"]):
                 cell.font = bf
     for col in ws.columns:
         ml = 0
@@ -830,12 +829,9 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
 
     def confirmar():
         try:
-            # lista completa de Paths escolhidos (revisados + obsoletos)
             caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
-            pasta_raiz_entregas = Path(pasta_entrega)          # "1.ENTREGAS"
-
+            pasta_raiz_entregas = Path(pasta_entrega)       
             nova = processar_entrega_arquivos(caminhos, pasta_raiz_entregas)
-
             messagebox.showinfo(
                 "Sucesso",
                 f"Nova entrega criada:\n{nova}\n"
@@ -845,7 +841,6 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar entrega:\n{e}")
 
-    # Botões
     bf = tk.Frame(j)
     bf.pack(side="bottom", anchor="e", pady=5, padx=10)
     ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
