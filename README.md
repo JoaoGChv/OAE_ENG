@@ -15,7 +15,7 @@
 
 # Para consguir rodar a aplicação em qualquer máquina, faça o seguinte processo:
 
-- Instale o Python (Qualquer versão que tenha suporte);
+Instale o Python (Qualquer versão que tenha suporte);
 - Rode no seu terminal (Linux ou PowerShell) - python -m venv venv ( __No Windows: .\venv\Scripts\activate__ );
 - Dentro do seu terminal execute - pip install -r requirements.txt (__Quando fizer o Git clone, ele vai ser puxada para sua máquina__)
 
