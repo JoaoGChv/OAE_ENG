@@ -11,4 +11,11 @@
 - Validação de Nomenclatura: Uma interface permite ao usuário revisar e corrigir a nomenclatura dos arquivos com base em regras predefinidas.
 - Verificação de Revisão: O sistema identifica e separa arquivos revisados e obsoletos com base na nomenclatura.
 - Organização de Arquivos: Os arquivos são movidos para pastas "Revisados" e "Obsoletos" para melhor organização.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Para consguir rodar a aplicação em qualquer máquina, faça o seguinte processo:
+
+- Instale o Python (Qualquer versão que tenha suporte);
+- Rode no seu terminal (Linux ou PowerShell) - python -m venv venv ( __No Windows: .\venv\Scripts\activate__ );
+- Dentro do seu terminal execute - pip install -r requirements.txt (__Quando fizer o Git clone, ele vai ser puxada para sua máquina__)
 
