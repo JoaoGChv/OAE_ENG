@@ -1,23 +1,24 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import Dict, Optional
+import re, os, sys, json, shutil, hashlib, logging
 from tkinter import ttk, messagebox, filedialog
-import os, tkinter as tk, json, shutil, sys, hashlib
-from datetime import datetime
-import ttkbootstrap
+from openpyxl.utils import get_column_letter
 from ttkbootstrap.style import Style
 from ttkbootstrap.constants import *
-from openpyxl import Workbook
+from typing import Dict, Optional
 from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+from openpyxl import Workbook
+from datetime import datetime
+from pathlib import Path
+import tkinter as tk
+import ttkbootstrap
 
-MARGIN_SIZE = 10
-JSON_FILE_PATH = "dados_projetos.json"
+JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao")
 PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
+NOMENCLATURA_REGRAS_JSON = "config/nomenclatura_regras.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
-NOMENCLATURA_REGRAS_JSON = "config/nomenclatura_regras.json"
-JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao")
+JSON_FILE_PATH = "dados_projetos.json"
+MARGIN_SIZE = 10
 
 import logging
 
@@ -27,9 +28,34 @@ logging.basicConfig(
     datefmt="%d/%m/%Y %H:%M:%S",
 )
 
-EntregaInfo = tuple[str, str, str] 
+AP_PREFIX = "1.AP - Entrega-"
+PE_PREFIX = "2.PE - Entrega-"
+ENTREGA_RE = re.compile(r"^(1\.AP|2\.PE) - Entrega-(\d+)$")
 
-def _hash_file(path: Path, buf: int = 8192) -> str:
+def _listar_entregas_tipo(pasta: Path, prefixo: str) -> list[Path]:
+    return sorted(
+        [p for p in pasta.iterdir()
+         if p.is_dir() and p.name.startswith(prefixo) and not p.name.endswith("-OBSOLETO")],
+        key=lambda p: int(ENTREGA_RE.match(p.name).group(2))
+    )
+
+def _proximo_num_entrega(pasta_entregas: Path, prefixo: str) -> int:
+    ativas = _listar_entregas_tipo(pasta_entregas, prefixo)
+    if not ativas:
+        return 1
+    ultimo = ENTREGA_RE.match(ativas[-1].name)
+    return int(ultimo.group(2)) + 1
+
+def _marcar_obsoleta(p: Path):
+    destino = p.with_name(p.name + "-OBSOLETO")
+    seq = 1
+    while destino.exists():
+        seq += 1
+        destino = p.with_name(p.name + f"-OBSOLETO{seq}")
+    p.rename(destino)
+    logging.info("Renomeada %s ➜ %s", p.name, destino.name)
+
+def _hash_file(path: Path, buf=8192) -> str:
     h = hashlib.md5()
     with path.open("rb") as f:
         while chunk := f.read(buf):
@@ -57,28 +83,30 @@ def obter_entrega_anterior(pasta_entregas: Path) -> Optional[Path]:
     )
     return entregas[-1] if entregas else None
 
-def listar_arquivos_entrega(pasta_entrega: Path) -> list[Path]:
-    return [p for p in pasta_entrega.iterdir() if p.is_file()]
+def listar_arquivos_entrega(pasta: Path) -> list[Path]:
+    return [p for p in pasta.iterdir() if p.is_file()]
 
-def comparar_arquivos(pasta_atual: Path, pasta_anterior: Optional[Path]) -> dict:
-    atual = {p.name: p for p in listar_arquivos_entrega(pasta_atual)}
-    anterior = {p.name: p for p in listar_arquivos_entrega(pasta_anterior)} if pasta_anterior else {}
-    r: Dict[str, dict] = {}
+def comparar_arquivos(pasta_nova: Path, pasta_ant: Optional[Path]) -> dict:
+    atual     = {p.name: p for p in listar_arquivos_entrega(pasta_nova)}
+    anterior  = {p.name: p for p in listar_arquivos_entrega(pasta_ant)} if pasta_ant else {}
+    resultado: Dict[str, dict] = {}
 
     for nome, p in atual.items():
         if nome == "_controle_entrega.json":
             continue
         if nome in anterior:
-            r[nome] = {"status": "nao_modificado" if _hash_file(p) == _hash_file(anterior[nome])
-                       else "modificado",
-                       "versao_anterior": str(anterior[nome])}
+            ig = _hash_file(p) == _hash_file(anterior[nome])
+            resultado[nome] = {
+                "status": "nao_modificado" if ig else "modificado",
+                "versao_anterior": str(anterior[nome])
+            }
         else:
-            r[nome] = {"status": "novo"}
+            resultado[nome] = {"status": "novo"}
 
     for nome, p_old in anterior.items():
-        if nome not in r and nome != "_controle_entrega.json":
-            r[nome] = {"status": "removido", "versao_anterior": str(p_old)}
-    return r
+        if nome not in resultado and nome != "_controle_entrega.json":
+            resultado[nome] = {"status": "removido", "versao_anterior": str(p_old)}
+    return resultado
 
 def marcar_pasta_obsoleta(pasta: Path) -> Path:
     base = pasta.with_name(pasta.name + "_OBS")
@@ -102,61 +130,49 @@ def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
     with (nova_pasta / "_controle_entrega.json").open("w", encoding="utf-8") as f:
         json.dump(comparacao, f, indent=4, ensure_ascii=False)
 
-def processar_entrega_arquivos(arquivos: list[Path], pasta_entregas: Path) -> Path:
-    pasta_entregas = pasta_entregas.resolve()
-    logging.info("⇢ Pasta 1.ENTREGAS: %s", pasta_entregas)
+def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, tipo: str) -> Path:
+    prefixo = AP_PREFIX if tipo == "AP" else PE_PREFIX
+    etapa   = 1       if tipo == "AP" else 2
 
-    # 1) localiza e marca a entrega ativa como obsoleta (se houver)
-    entrega_ativa = obter_entrega_anterior(pasta_entregas)
-    if entrega_ativa:
-        marcar_pasta_obsoleta(entrega_ativa)
+    # 1) marca obsoleta, se existir
+    ativas = _listar_entregas_tipo(pasta_entregas, prefixo)
+    if ativas:
+        _marcar_obsoleta(ativas[-1])
+    else:
+        logging.info("Nenhuma entrega ativa do tipo %s", tipo)
 
-    # 2) calcula número da nova entrega após a renomeação anterior
-    nums = []
-    for p in pasta_entregas.iterdir():
-        if p.is_dir() and p.name.startswith("Entrega_"):
-            parte = p.name.split("_")[1]      # "01", "02OBS", ...
-            dig = ''.join(ch for ch in parte if ch.isdigit())
-            if dig.isdigit():
-                nums.append(int(dig))
-    anterior = obter_entrega_anterior(pasta_entregas)
-    prox_num = (max(nums) + 1) if nums else 1
-    nova_pasta = pasta_entregas / f"Entrega_{prox_num:02d}"
-    logging.debug("Nova entrega → %s", nova_pasta)   
+    # 2) calcula próxima numeração
+    n     = _proximo_num_entrega(pasta_entregas, prefixo)
+    nova  = pasta_entregas / f"{prefixo}{n}"
+    nova.mkdir(parents=True, exist_ok=False)
+    logging.debug("Criada nova entrega: %s", nova)
 
-    try:
-        nova_pasta.mkdir(parents=True, exist_ok=False)
-    except FileExistsError:
-        logging.error("Pasta %s já existe — verifique contagem!", nova_pasta)
-        raise
-    except Exception as e:
-        logging.error("Não foi possível criar %s: %s", nova_pasta, e)
-        raise
-
-    # 3) monta dicionário de comparação vs. entrega anterior (se existir)
-    comparacao = comparar_arquivos(nova_pasta, anterior)  # nova está vazia mas ok
+    # 3) diff vs. anterior (se havia)
+    comp  = comparar_arquivos(nova, ativas[-1] if ativas else None)
 
     # 4) copia arquivos escolhidos
     for src in arquivos:
-        dst = nova_pasta / src.name
+        dst = nova / src.name
         shutil.copy2(src, dst)
-        logging.debug("Copiado %s → %s", src.name, dst)
+        logging.debug("Copiado %s ➜ %s", src.name, dst)
 
-    # 5) gera JSON de controle
-    gerar_arquivo_controle(nova_pasta, comparacao)
-    logging.info("✔ Entrega %s concluída com %d itens", nova_pasta.name, len(comparacao))
-    return nova_pasta
+    # 5) grava JSON de controle
+    comp["tipo_entrega"] = tipo
+    comp["etapa"]        = etapa
+    with (nova / "_controle_entrega.json").open("w", encoding="utf-8") as f:
+        json.dump(comp, f, indent=4, ensure_ascii=False)
 
-def carregar_regras_nomenclatura():
+    return nova
+
+def carregar_regras_nomenclatura() -> dict:
     if not os.path.exists(NOMENCLATURA_REGRAS_JSON):
-        print("[ERRO] Arquivo de regras não encontrado:")
+        logging.warning("Arquivo %s não encontrado", NOMENCLATURA_REGRAS_JSON)
         return {}
     try:
-        with open(NOMENCLATURA_REGRAS_JSON, "r", encoding="utf-8") as f:
-            r = json.load(f)
-            return r
+        with open(NOMENCLATURA_REGRAS_JSON, encoding="utf-8") as f:
+            return json.load(f)
     except json.JSONDecodeError as e:
-        print("[ERRO] Falha ao ler JSON de regras:", e)
+        logging.error("JSON inválido em %s – %s", NOMENCLATURA_REGRAS_JSON, e)
         return {}
     
 def caminho_contador(projeto_num: str) -> str:
@@ -231,76 +247,19 @@ def atualizar_historico(lista_arquivos, c=HISTORICO_JSON):
         json.dump(h, f, indent=4, ensure_ascii=False)
     return h
 
-def criar_pasta_entrega(base_1entregas: str, fase: str, indice: int) -> EntregaInfo | tuple[None, None, None]:
-    nome_pasta = f"{indice:02d}.{fase}.ENT-{indice:02d}-ENTREGUE"
-    entrega_dir = os.path.join(base_1entregas, nome_pasta)
-
-    if os.path.exists(entrega_dir):
-        messagebox.showerror("Erro", f"Pasta '{nome_pasta}' já existe. Processo abortado.")
-        return None, None, None  # sinaliza erro
-
-    try:
-        os.makedirs(entrega_dir)
-        revisados_dir = os.path.join(entrega_dir, "Revisados")
-        os.makedirs(revisados_dir)
-        obsoletos_dir = os.path.join(
-            entrega_dir, f"Obsoleto_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-        )
-        os.makedirs(obsoletos_dir)
-        return entrega_dir, revisados_dir, obsoletos_dir
-    except Exception as e:
-        messagebox.showerror("Erro", f"Falha ao criar pastas de entrega:\n{e}")
-        return None, None, None
-
-def mover_arquivos(lista_arquivos, dst):
-    for arq in lista_arquivos:
-        o = arq.get("caminho")
-        n = arq.get("Nome do Arquivo")
-        r = logging.debug("arquivo movidos", mover_arquivos)
-        if not r:
-            messagebox.showerror("Erro", f"O arquivo '{n}' não foi encontrado.")
-            continue
-
-
-        if not o:
-            messagebox.showerror("Erro", f"O caminho para '{n}' não foi encontrado.")
-            continue
-        if not os.path.exists(o):
-            messagebox.showerror("Erro", f"O arquivo '{n}' com caminho '{o}' não existe.")
-            continue
-        try:
-            shutil.move(o, os.path.join(dst, n))
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao mover '{n}' de '{o}': {e}")
-
-def mover_obsoletos(lista_obsoletos, dst):
-    for arq in lista_obsoletos:
-        o = arq.get("caminho")
-        n = arq.get("Nome do Arquivo")
-        if not o:
-            messagebox.showerror("Erro", f"O caminho para '{n}' não foi encontrado.")
-            continue
-        if not os.path.exists(o):
-            messagebox.showerror("Erro", f"O arquivo '{n}' com caminho '{o}' não existe.")
-            continue
-        b, e = os.path.splitext(n)
-        try:
-            shutil.move(o, os.path.join(dst, b + "_OBSOLETO" + e))
-        except Exception as err:
-            messagebox.showerror("Erro", f"Falha ao mover obsoleto '{n}': {err}")
-
 def pos_processamento(*args):
     messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
     sys.exit(0)
 
-def janela_selecao_projeto():
-    root = tk.Tk()
+def janela_selecao_projeto(master):
+    root = master
     root.title("Selecionar Projeto")
     root.geometry("600x400")
     projetos_dict = carregar_projetos()
     style = ttkbootstrap.Style(theme="flatly")
     if not projetos_dict:
         messagebox.showerror("Erro", "Nenhum projeto encontrado ou erro no arquivo JSON.")
+        Disciplinas_Detalhes_Projeto(sel["numero"], sel["caminho"], master=root)
         root.destroy()
         return None, None
     p_conv = []
@@ -327,8 +286,8 @@ def janela_selecao_projeto():
         v = tree.item(si[0], "values")
         sel["numero"] = v[0]
         sel["caminho"] = v[2]
-        root.destroy()
-        Disciplinas_Detalhes_Projeto(sel["numero"], sel["caminho"])
+        root.withdraw() 
+        Disciplinas_Detalhes_Projeto(sel["numero"], sel["caminho"], master=root)
     frame = tk.Frame(root)
     frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
     tk.Label(frame, text="Digite nome ou parte do nome do projeto:", font=("Arial", 10)).pack(anchor="w")
@@ -354,12 +313,12 @@ def janela_selecao_projeto():
     root.mainloop()
     return sel["numero"], sel["caminho"]
 
-def Disciplinas_Detalhes_Projeto(numero, caminho):
+def Disciplinas_Detalhes_Projeto(numero, caminho, master=None):
     d_path = os.path.join(caminho, "3 Desenvolvimento")
     if not os.path.exists(d_path):
         messagebox.showerror("Erro", "A pasta de disciplinas não foi encontrada.")
         return
-    nj = tk.Tk()
+    nj = tk.Toplevel(master)
     nj.title(f"Gerenciador de Projetos - Projeto {numero}")
     nj.geometry("900x600")
     hd = tk.Label(nj, text=f"Projeto {numero} - Selecione a disciplina para entrega", font=("Helvetica", 14, "bold"), anchor="w")
@@ -422,7 +381,7 @@ def Disciplinas_Detalhes_Projeto(numero, caminho):
 
     def voltar():
         nj.destroy()
-        janela_selecao_projeto()
+        master.deiconify()
     cf = tk.Frame(nj, bg="#f5f5f5", padx=20, pady=20)
     cf.pack(fill=tk.BOTH, expand=True)
     bf = tk.Frame(nj)
@@ -500,8 +459,8 @@ def extrair_dados_arquivo(nome_arquivo):
         }
     return d
 
-def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None, pasta_entrega=None):
-    j = tk.Tk()
+def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None, pasta_entrega=None, master=None):
+    j = tk.Toplevel(master)
     j.title(f"Gerenciador de Projetos - Projeto {numero}")
     j.geometry("1200x800")
     fpr = tk.Frame(j)
@@ -582,7 +541,7 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
 
     def voltar():
         j.destroy()
-        Disciplinas_Detalhes_Projeto(numero, caminho_projeto if caminho_projeto else "")
+        master.deiconify()
     bf2 = tk.Frame(cp)
     bf2.pack(side=tk.LEFT, pady=10, padx=10)
     ttk.Button(bf2, text="Adicionar Arquivo", command=adicionar_arquivos).pack(side=tk.LEFT, padx=5)
@@ -612,9 +571,9 @@ def identificar_revisoes(lista_arquivos):
         aobs.extend([q[1] for q in arqs[:-1]])
     return arrv, aobs
 
-def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
+def tela_analise_nomenclatura(lista_arquivos, pasta_entrega: str, master=None):
     rnom = carregar_regras_nomenclatura()
-    j = tk.Tk()
+    j = tk.Toplevel(master)
     j.title("Verificação de Nomenclatura")
     j.geometry("1400x800")
     lb_i = tk.Label(j, text="Confira a nomenclatura. Clique no nome para editar campos. Corrija antes de avançar, se necessário.", font=("Helvetica",12))
@@ -725,14 +684,11 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega=None):
     j.after(100, ajustar_canvas)
 
     def avancar():
-        if fields_in_error:
-            messagebox.showerror("Erro", "Existem campos vazios ou inválidos. Corrija antes de prosseguir.")
-        else:
-            j.destroy()
-            tela_verificacao_revisao(lista_arquivos, pasta_entrega=pasta_entrega)
+        modal_tipo_entrega(j,
+            lambda t: tela_tipo_escolhido(lista_arquivos, pasta_entrega, t))
     def voltar():
         j.destroy()
-        exibir_interface_tabela("467", lista_arquivos, pasta_entrega=pasta_entrega)
+        master.deiconify()
     bf = tk.Frame(j)
     bf.pack(side="bottom", anchor="e", pady=MARGIN_SIZE, padx=MARGIN_SIZE)
     ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
@@ -799,9 +755,62 @@ def criar_arquivo_excel(diretorio, arquivos_novos, arquivos_revisados, arquivos_
     wb.save(cam)
     return cam
 
-def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
+def modal_tipo_entrega(master, on_confirm):
+    win = tk.Toplevel(master)
+    win.title("Tipo de Entrega")
+    win.transient(master)
+    win.grab_set()
+    win.resizable(False, False)
+    win.minsize(300, 140)
+    master.update_idletasks()
+    x = master.winfo_rootx() + master.winfo_width() // 2 - 150
+    y = master.winfo_rooty()  + master.winfo_height() // 2 - 70
+    win.geometry(f"+{x}+{y}")
+    ttk.Label(win, text="Escolha o tipo de entrega:",
+              font=("Arial", 11, "bold")).pack(pady=(12, 6), anchor="w", padx=20)
+    var = tk.StringVar(value="AP")
+    frm = ttk.Frame(win); frm.pack(padx=20, pady=5, anchor="w")
+    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var).pack(anchor="w")
+    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var).pack(anchor="w")
+    ttk.Separator(win).pack(fill="x", pady=10, padx=5)
+    ttk.Button(win, text="Confirmar",
+               command=lambda:(win.grab_release(), win.destroy(),
+                               on_confirm(var.get()))).pack(pady=(0,12))
+
+def tela_tipo_escolhido(lista_arquivos, pasta_entrega: str, tipo: str, master=None):
+    # 1) validações básicas
+    erros = []
+    for a in lista_arquivos:
+        caminho = a.get("caminho")
+        nome    = a.get("Nome do Arquivo")
+        if not caminho or not Path(caminho).exists():
+            erros.append(f"Caminho ausente → {nome}")
+    if erros:
+        if len(erros) <= 3:
+            messagebox.showerror("Erros", "\n".join(erros))
+        else:
+            _lista_erros_treeview(erros)
+        return                           # bloqueia avanço
+
+    # 2) processa entrega
+    try:
+        tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=master)
+    except Exception as e:
+        logging.exception(e)
+        messagebox.showerror("Falha", str(e))
+
+def _lista_erros_treeview(erros):
+    w = tk.Toplevel(); w.title("Lista de erros")
+    tree = ttk.Treeview(w, columns=["e"], show="headings", height=10)
+    tree.heading("e", text="Ocorrências")
+    tree.pack(fill="both", expand=True, padx=10, pady=10)
+    for e in erros:
+        tree.insert("", "end", values=(e,))
+    ttk.Button(w, text="Fechar", command=w.destroy).pack(pady=5)
+
+def tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=None):
     arrv, aobs = identificar_revisoes(lista_arquivos)
-    j = tk.Tk()
+    j = tk.Toplevel(master)
     j.title("Verificação de Revisão")
     j.geometry("1000x700")
     lb_i = tk.Label(j, text="Confira os arquivos revisados e obsoletos antes da entrega.")
@@ -825,13 +834,13 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
 
     def voltar():
         j.destroy()
-        tela_analise_nomenclatura(lista_arquivos, pasta_entrega=pasta_entrega)
+        master.deiconify()
 
     def confirmar():
         try:
             caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
             pasta_raiz_entregas = Path(pasta_entrega)       
-            nova = processar_entrega_arquivos(caminhos, pasta_raiz_entregas)
+            nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
             messagebox.showinfo(
                 "Sucesso",
                 f"Nova entrega criada:\n{nova}\n"
@@ -845,7 +854,11 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega=None):
     bf.pack(side="bottom", anchor="e", pady=5, padx=10)
     ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
     ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.RIGHT, padx=5)
+    ttk.Button(j, text="Fechar", command=j.destroy).pack(pady=10)
     j.mainloop()
 
 if __name__ == "__main__":
-    exibir_interface_tabela("467")
+    root = tk.Tk()           # única raiz real
+    root.withdraw()          # se não quiser que apareça imediatamente
+    janela_selecao_projeto(root)   # primeira tela
+    root.mainloop()

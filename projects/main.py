@@ -1,3 +1,4 @@
+import tkinter as tk
 import sys
 import os
 
@@ -6,7 +7,8 @@ from ui.telas import janela_selecao_projeto
 
 def main():
     print("Abrindo a interface de seleção de projeto...")
-    numero_projeto, caminho_projeto = janela_selecao_projeto()
+    root = tk.Tk()
+    numero_projeto, caminho_projeto = janela_selecao_projeto(root)
 
     if numero_projeto and caminho_projeto:
         print(f"Projeto selecionado: Número {numero_projeto}, Caminho {caminho_projeto}")        
