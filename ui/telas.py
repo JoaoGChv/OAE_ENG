@@ -122,43 +122,47 @@ def marcar_pasta_obsoleta(pasta: Path) -> Path:
 def criar_nova_pasta_entrega(pasta_entregas: Path) -> Path:
     ultima = obter_entrega_anterior(pasta_entregas)
     prox = 1 if not ultima else int(ultima.name.split("_")[1]) + 1
-    nova = pasta_entregas / f"Entrega_{prox:02d}"
+    nova = pasta_entregas  /  f"Entrega_{prox:02d}"
     nova.mkdir(parents=True, exist_ok=False)
     return nova
 
 def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
-    with (nova_pasta / "_controle_entrega.json").open("w", encoding="utf-8") as f:
+    with (nova_pasta / "_controle_entrega.json").open("w",  encoding="utf-8") as f:
         json.dump(comparacao, f, indent=4, ensure_ascii=False)
 
 def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, tipo: str) -> Path:
     prefixo = AP_PREFIX if tipo == "AP" else PE_PREFIX
-    etapa   = 1       if tipo == "AP" else 2
+    etapa = 1 if tipo == "AP" else 2
 
-    # 1) marca obsoleta, se existir
+    # 1️⃣  pega a entrega ativa (se existir) ANTES de renomear
     ativas = _listar_entregas_tipo(pasta_entregas, prefixo)
-    if ativas:
-        _marcar_obsoleta(ativas[-1])
-    else:
-        logging.info("Nenhuma entrega ativa do tipo %s", tipo)
+    entrega_ativa = ativas[-1] if ativas else None
 
-    # 2) calcula próxima numeração
-    n     = _proximo_num_entrega(pasta_entregas, prefixo)
-    nova  = pasta_entregas / f"{prefixo}{n}"
+    # 2️⃣  calcula o próximo número a partir da ativa
+    if entrega_ativa:
+        ultimo_num   = int(ENTREGA_RE.match(entrega_ativa.name).group(2))
+        proximo_num  = ultimo_num + 1
+    else:
+        proximo_num  = 1
+
+    # 3️⃣  cria a nova pasta
+    nova = pasta_entregas / f"{prefixo}{proximo_num}"
     nova.mkdir(parents=True, exist_ok=False)
     logging.debug("Criada nova entrega: %s", nova)
 
-    # 3) diff vs. anterior (se havia)
-    comp  = comparar_arquivos(nova, ativas[-1] if ativas else None)
+    # 4️⃣  gera o diff contra a entrega ativa (ela ainda existe)
+    comp = comparar_arquivos(nova, entrega_ativa)
 
-    # 4) copia arquivos escolhidos
+    # 5️⃣  agora sim, marca a velha como obsoleta
+    if entrega_ativa:
+        _marcar_obsoleta(entrega_ativa)
+
+    # 6️⃣  copia os arquivos escolhidos
     for src in arquivos:
-        dst = nova / src.name
-        shutil.copy2(src, dst)
-        logging.debug("Copiado %s ➜ %s", src.name, dst)
+        shutil.copy2(src, nova / src.name)
 
-    # 5) grava JSON de controle
-    comp["tipo_entrega"] = tipo
-    comp["etapa"]        = etapa
+    # 7️⃣  grava JSON de controle
+    comp.update({"tipo_entrega": tipo, "etapa": etapa})
     with (nova / "_controle_entrega.json").open("w", encoding="utf-8") as f:
         json.dump(comp, f, indent=4, ensure_ascii=False)
 
@@ -684,8 +688,10 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega: str, master=None):
     j.after(100, ajustar_canvas)
 
     def avancar():
-        modal_tipo_entrega(j,
-            lambda t: tela_tipo_escolhido(lista_arquivos, pasta_entrega, t))
+        def on_confirm(tipo):
+            j.destroy()  # Fecha a janela da tela de análise de nomenclatura
+            tela_tipo_escolhido(lista_arquivos, pasta_entrega, tipo, master=master)
+        modal_tipo_entrega(j, on_confirm)
     def voltar():
         j.destroy()
         master.deiconify()
@@ -844,9 +850,12 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=None):
             messagebox.showinfo(
                 "Sucesso",
                 f"Nova entrega criada:\n{nova}\n"
-                "_controle_entrega.json gerado com o status dos arquivos."
-            )
+                "_controle_entrega.json gerado com o status dos arquivos.")
+            
             j.destroy()
+            if master is not None:
+                master.destroy()
+            sys.exit(0)
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar entrega:\n{e}")
 
