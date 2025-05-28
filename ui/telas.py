@@ -125,7 +125,7 @@ def criar_nova_pasta_entrega(pasta_entregas: Path) -> Path:
     nova = pasta_entregas  /  f"Entrega_{prox:02d}"
     nova.mkdir(parents=True, exist_ok=False)
     return nova
-
+    
 def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
     with (nova_pasta / "_controle_entrega.json").open("w",  encoding="utf-8") as f:
         json.dump(comparacao, f, indent=4, ensure_ascii=False)
