@@ -62,16 +62,6 @@ def _hash_file(path: Path, buf=8192) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def _e_pasta_entrega(p: Path) -> bool:
-    if not p.is_dir():
-        return False
-    if not p.name.startswith("Entrega_"):
-        return False
-    if p.name.endswith("_OBS"):
-        return False
-    num = p.name.split("_")[1]
-    return num.isdigit()
-
 def obter_entrega_anterior(pasta_entregas: Path) -> Optional[Path]:
     entregas = sorted(
         [p for p in pasta_entregas.iterdir()
@@ -107,35 +97,38 @@ def comparar_arquivos(pasta_nova: Path, pasta_ant: Optional[Path]) -> dict:
         if nome not in resultado and nome != "_controle_entrega.json":
             resultado[nome] = {"status": "removido", "versao_anterior": str(p_old)}
     return resultado
-
-def marcar_pasta_obsoleta(pasta: Path) -> Path:
-    base = pasta.with_name(pasta.name + "_OBS")
-    idx = 1
-    destino = base
-    while destino.exists():
-        idx += 1
-        destino = pasta.with_name(f"{pasta.name}_OBS{idx}")
-    pasta.rename(destino)
-    logging.info("Pasta %s ➜ %s (obsoleta)", pasta.name, destino.name)
-    return destino
-
-def criar_nova_pasta_entrega(pasta_entregas: Path) -> Path:
-    ultima = obter_entrega_anterior(pasta_entregas)
-    prox = 1 if not ultima else int(ultima.name.split("_")[1]) + 1
-    nova = pasta_entregas  /  f"Entrega_{prox:02d}"
-    nova.mkdir(parents=True, exist_ok=False)
-    return nova
     
 def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
     with (nova_pasta / "_controle_entrega.json").open("w",  encoding="utf-8") as f:
         json.dump(comparacao, f, indent=4, ensure_ascii=False)
 
+def salvar_historico_global_entregas(pasta_entregas: Path, registro: dict):
+    historico_path = pasta_entregas / "historico_entregas.json"
+    historico = []
+    if historico_path.exists():
+        with open(historico_path, "r", encoding="utf-8") as f:
+            try:
+                historico = json.load(f)
+            except Exception:
+                historico = []
+    historico.append(registro)
+    with open(historico_path, "w", encoding="utf-8") as f:
+        json.dump(historico, f, indent=4, ensure_ascii=False)
+
 def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, tipo: str) -> Path:
+    # Determina subpasta correspondente
+    tipo_subpasta = 'AP' if tipo == "AP" else 'PE'
+    pasta_tipo = pasta_entregas / tipo_subpasta
+
+    # Garante que a subpasta existe
+    pasta_tipo.mkdir(exist_ok=True, parents=True)
+
+    # Resto da lógica igual, só que dentro da subpasta
     prefixo = AP_PREFIX if tipo == "AP" else PE_PREFIX
     etapa = 1 if tipo == "AP" else 2
 
-    # 1️⃣  pega a entrega ativa (se existir) ANTES de renomear
-    ativas = _listar_entregas_tipo(pasta_entregas, prefixo)
+    # 1) marca obsoleta, se existir
+    ativas = _listar_entregas_tipo(pasta_tipo, prefixo)
     entrega_ativa = ativas[-1] if ativas else None
 
     # 2️⃣  calcula o próximo número a partir da ativa
@@ -145,26 +138,37 @@ def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, 
     else:
         proximo_num  = 1
 
-    # 3️⃣  cria a nova pasta
-    nova = pasta_entregas / f"{prefixo}{proximo_num}"
+    # 2) calcula próxima numeração
+    n     = _proximo_num_entrega(pasta_tipo, prefixo)
+    nova  = pasta_tipo / f"{prefixo}{n}"
     nova.mkdir(parents=True, exist_ok=False)
     logging.debug("Criada nova entrega: %s", nova)
 
-    # 4️⃣  gera o diff contra a entrega ativa (ela ainda existe)
+    # 3) diff vs. anterior (se havia)
     comp = comparar_arquivos(nova, entrega_ativa)
 
-    # 5️⃣  agora sim, marca a velha como obsoleta
+   # 4  agora sim, marca a velha como obsoleta
     if entrega_ativa:
         _marcar_obsoleta(entrega_ativa)
 
-    # 6️⃣  copia os arquivos escolhidos
+    # 5  copia os arquivos escolhidos
     for src in arquivos:
         shutil.copy2(src, nova / src.name)
 
-    # 7️⃣  grava JSON de controle
+    # 6  grava JSON de controle
     comp.update({"tipo_entrega": tipo, "etapa": etapa})
     with (nova / "_controle_entrega.json").open("w", encoding="utf-8") as f:
         json.dump(comp, f, indent=4, ensure_ascii=False)
+
+    registro_historico = {
+        "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "tipo_entrega": tipo,
+        "etapa": etapa,
+        "pasta_entrega": str(nova),
+        "arquivos_entregues": [src.name for src in arquivos],
+        # Se quiser mais detalhes, pode expandir aqui...
+    }
+    salvar_historico_global_entregas(pasta_entregas, registro_historico)
 
     return nova
 
@@ -701,65 +705,58 @@ def tela_analise_nomenclatura(lista_arquivos, pasta_entrega: str, master=None):
     ttk.Button(bf, text="Avançar", command=avancar).pack(side=tk.RIGHT, padx=5)
     j.mainloop()
 
-def criar_arquivo_excel(diretorio, arquivos_novos, arquivos_revisados, arquivos_obsoletos):
-    now = datetime.now()
-    ds = now.strftime("%d_%m_%Y")
-    hs = now.strftime("%Hh%Mmin")
-    nome_arq = f"GRD {ds}_{hs}.xlsx"
-    cam = os.path.join(diretorio, nome_arq)
+def criar_arquivo_excel_acumulativo(pasta_raiz_entregas: str):
+    json_controle_path = os.path.join(pasta_raiz_entregas, "historico_entregas.json")
+    if not os.path.exists(json_controle_path):
+        print(f"[ATENÇÃO] histórico não existe em: {json_controle_path}")
+        return
+
+    with open(json_controle_path, "r", encoding="utf-8") as f:
+        historico = json.load(f)            # lista de entregas
+
+    if not historico:
+        print("[ATENÇÃO] Nenhuma entrega registrada.")
+        return
+
     wb = Workbook()
     ws = wb.active
     ws.title = "GRD"
-    bf = Font(bold=True)
+    negrito = Font(bold=True)
+
     ws.append(["OLIVEIRA ARAÚJO ENGENHARIA"])
-    ws.append(["Lista de arquivos de projetos entregues com controle de versão."])
-    ws.append(["Diretório:", diretorio])
-    ws.append(["Data de emissão:", f"{ds}_{hs}"])
-    ws.append(["Arquivo Revisado"])
-    if arquivos_revisados:
-        ws.append(["Nome do arquivo","Revisão","Data de modificação"])
-        for a in arquivos_revisados:
-            ws.append([a["Nome do Arquivo"],a["Revisão"],a.get("Modificação","")])
-    else:
-        ws.append(["Nenhum arquivo revisado"])
+    ws.append(["Lista acumulativa de arquivos entregues"])
+    ws.append(["Gerado em:", datetime.now().strftime("%d/%m/%Y %H:%M")])
     ws.append([])
-    ws.append(["Arquivo Novo"])
-    if arquivos_novos:
-        ws.append(["Nome do arquivo","Revisão","Data de modificação"])
-        for a in arquivos_novos:
-            ws.append([a["Nome do Arquivo"],a["Revisão"],a.get("Modificação","")])
-    else:
-        ws.append(["Nenhum arquivo novo"])
-    ws.append([])
-    ws.append(["Arquivo Obsoleto"])
-    if arquivos_obsoletos:
-        ws.append(["Nome do arquivo","Revisão","Data de modificação"])
-        for a in arquivos_obsoletos:
-            ws.append([a["Nome do Arquivo"],a["Revisão"],a.get("Modificação","")])
-    else:
-        ws.append(["Nenhum arquivo obsoleto"])
-    from openpyxl.utils import get_column_letter
+
+    for idx, ent in enumerate(historico, 1):
+        ws.append([f"Entrega {idx}",
+                   f"Tipo: {ent.get('tipo_entrega', '')}",
+                   f"Etapa: {ent.get('etapa', '')}",
+                   f"Data: {ent.get('data', '')}"])
+        ws.append(["Arquivo", "Revisão", "Status", "Caminho"])
+        for arq in ent.get("arquivos_entregues", []):
+            ws.append([
+                arq,                       # só o nome
+                ent.get("revisao", ""),    # opcional – se quiser guardar
+                ent.get("status", ""),     # idem
+                os.path.join(ent["pasta_entrega"], arq)
+            ])
+        ws.append([])
+
+    # formatação rápida
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
         for cell in row:
-            if isinstance(cell.value,str) and (
-                "OLIVEIRA" in cell.value or
-                "Lista de arquivos" in cell.value or
-                "Diretório:" in cell.value or
-                "Data de emissão:" in cell.value or
-                "Arquivo Revisado" in cell.value or
-                "Arquivo Novo" in cell.value or
-                "Arquivo Obsoleto" in cell.value or
-                cell.value in ["Nome do arquivo","Revisão","Data de modificação"]):
-                cell.font = bf
+            if cell.row <= 3 or cell.column == 1:
+                cell.font = negrito
     for col in ws.columns:
-        ml = 0
-        c = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.value:
-                ml = max(ml,len(str(cell.value)))
-        ws.column_dimensions[c].width = ml+2
-    wb.save(cam)
-    return cam
+        max_len = max(len(str(c.value)) if c.value else 0 for c in col)
+        ws.column_dimensions[get_column_letter(col[0].column)].width = max_len + 2
+
+    # garante que a pasta existe e salva
+    os.makedirs(pasta_raiz_entregas, exist_ok=True)
+    caminho_excel = os.path.join(pasta_raiz_entregas, "GRD.xlsx")
+    wb.save(caminho_excel)
+    print(f"[INFO] GRD.xlsx atualizado em: {caminho_excel}")
 
 def modal_tipo_entrega(master, on_confirm):
     win = tk.Toplevel(master)
@@ -847,12 +844,17 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=None):
             caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
             pasta_raiz_entregas = Path(pasta_entrega)       
             nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
+            pasta_entregas_disciplina = pasta_raiz_entregas
+            nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
+            criar_arquivo_excel_acumulativo(str(pasta_raiz_entregas))
+
             messagebox.showinfo(
                 "Sucesso",
                 f"Nova entrega criada:\n{nova}\n"
                 "_controle_entrega.json gerado com o status dos arquivos.")
             
             j.destroy()
+
             if master is not None:
                 master.destroy()
             sys.exit(0)
