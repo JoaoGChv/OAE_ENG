@@ -844,8 +844,6 @@ def tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=None):
             caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
             pasta_raiz_entregas = Path(pasta_entrega)       
             nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
-            pasta_entregas_disciplina = pasta_raiz_entregas
-            nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
             criar_arquivo_excel_acumulativo(str(pasta_raiz_entregas))
 
             messagebox.showinfo(
