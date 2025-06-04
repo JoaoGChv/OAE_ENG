@@ -1,37 +1,50 @@
 from __future__ import annotations
-import re, os, sys, json, shutil, hashlib, logging
+import re
+import os
+import sys
+import json
+import shutil
+import hashlib
+import logging
+import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from openpyxl.utils import get_column_letter
-from ttkbootstrap.style import Style
-from ttkbootstrap.constants import *
-from typing import Dict, Optional
 from openpyxl.styles import Font
 from openpyxl import Workbook
 from datetime import datetime
 from pathlib import Path
-import tkinter as tk
-import ttkbootstrap
+from typing import Optional, Dict
 
-JSON_CONTADORES_DIR = (r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao")
+# --------------------- CONFIGURAÇÕES ---------------------
+JSON_CONTADORES_DIR = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao"
 PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
-NOMENCLATURA_REGRAS_JSON = "config/nomenclatura_regras.json"
+# Pressupõe-se que 'nomenclaturas.json' fique no mesmo diretório deste script
+SCRIPT_DIR = Path(__file__).parent
+NOMENCLATURA_REGRAS_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\OAE_ENG\nomenclaturas.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
 JSON_FILE_PATH = "dados_projetos.json"
 MARGIN_SIZE = 10
 
-import logging
-
+LOG_FILENAME = "debug_entregas.log"
 logging.basicConfig(
-    level=logging.DEBUG,                  
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%d/%m/%Y %H:%M:%S",
+    handlers=[
+        logging.FileHandler(LOG_FILENAME, encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 
 AP_PREFIX = "1.AP - Entrega-"
 PE_PREFIX = "2.PE - Entrega-"
 ENTREGA_RE = re.compile(r"^(1\.AP|2\.PE) - Entrega-(\d+)$")
 
+
+# -----------------------------------------------------
+# FUNÇÕES AUXILIARES ORIGINAIS
+# -----------------------------------------------------
 def _listar_entregas_tipo(pasta: Path, prefixo: str) -> list[Path]:
     return sorted(
         [p for p in pasta.iterdir()
@@ -97,7 +110,7 @@ def comparar_arquivos(pasta_nova: Path, pasta_ant: Optional[Path]) -> dict:
         if nome not in resultado and nome != "_controle_entrega.json":
             resultado[nome] = {"status": "removido", "versao_anterior": str(p_old)}
     return resultado
-    
+
 def gerar_arquivo_controle(nova_pasta: Path, comparacao: dict):
     with (nova_pasta / "_controle_entrega.json").open("w",  encoding="utf-8") as f:
         json.dump(comparacao, f, indent=4, ensure_ascii=False)
@@ -116,46 +129,29 @@ def salvar_historico_global_entregas(pasta_entregas: Path, registro: dict):
         json.dump(historico, f, indent=4, ensure_ascii=False)
 
 def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, tipo: str) -> Path:
-    # Determina subpasta correspondente
     tipo_subpasta = 'AP' if tipo == "AP" else 'PE'
     pasta_tipo = pasta_entregas / tipo_subpasta
-
-    # Garante que a subpasta existe
     pasta_tipo.mkdir(exist_ok=True, parents=True)
 
-    # Resto da lógica igual, só que dentro da subpasta
     prefixo = AP_PREFIX if tipo == "AP" else PE_PREFIX
     etapa = 1 if tipo == "AP" else 2
 
-    # 1) marca obsoleta, se existir
     ativas = _listar_entregas_tipo(pasta_tipo, prefixo)
     entrega_ativa = ativas[-1] if ativas else None
 
-    # 2️⃣  calcula o próximo número a partir da ativa
-    if entrega_ativa:
-        ultimo_num   = int(ENTREGA_RE.match(entrega_ativa.name).group(2))
-        proximo_num  = ultimo_num + 1
-    else:
-        proximo_num  = 1
-
-    # 2) calcula próxima numeração
     n     = _proximo_num_entrega(pasta_tipo, prefixo)
     nova  = pasta_tipo / f"{prefixo}{n}"
     nova.mkdir(parents=True, exist_ok=False)
     logging.debug("Criada nova entrega: %s", nova)
 
-    # 3) diff vs. anterior (se havia)
     comp = comparar_arquivos(nova, entrega_ativa)
 
-   # 4  agora sim, marca a velha como obsoleta
     if entrega_ativa:
         _marcar_obsoleta(entrega_ativa)
 
-    # 5  copia os arquivos escolhidos
     for src in arquivos:
         shutil.copy2(src, nova / src.name)
 
-    # 6  grava JSON de controle
     comp.update({"tipo_entrega": tipo, "etapa": etapa})
     with (nova / "_controle_entrega.json").open("w", encoding="utf-8") as f:
         json.dump(comp, f, indent=4, ensure_ascii=False)
@@ -166,23 +162,39 @@ def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, 
         "etapa": etapa,
         "pasta_entrega": str(nova),
         "arquivos_entregues": [src.name for src in arquivos],
-        # Se quiser mais detalhes, pode expandir aqui...
     }
     salvar_historico_global_entregas(pasta_entregas, registro_historico)
+    
+    try:
+        criar_arquivo_controle(pasta_entregas)
+        logging.debug("GRD.xlsx atualizado em %s", pasta_entregas)
+    except Exception:
+        logging.exception("Falha ao gerar GRD.xlsx")
 
     return nova
 
-def carregar_regras_nomenclatura() -> dict:
+def carregar_regras_nomenclatura(projeto_num: str) -> dict:
+    """
+    Lê o JSON completo e retorna apenas o dicionário de 'campos' para o projeto.
+    Se não existir, retorna {}.
+    """
     if not os.path.exists(NOMENCLATURA_REGRAS_JSON):
         logging.warning("Arquivo %s não encontrado", NOMENCLATURA_REGRAS_JSON)
         return {}
     try:
         with open(NOMENCLATURA_REGRAS_JSON, encoding="utf-8") as f:
-            return json.load(f)
+            todas_regras = json.load(f)
     except json.JSONDecodeError as e:
         logging.error("JSON inválido em %s – %s", NOMENCLATURA_REGRAS_JSON, e)
         return {}
-    
+
+    projeto_key = str(projeto_num)
+    projeto_entry = todas_regras.get(projeto_key)
+    if not projeto_entry or "campos" not in projeto_entry:
+        logging.warning("Nenhuma regra encontrada para o projeto %s", projeto_key)
+        return {}
+    return projeto_entry  # será um dict com "campos": [...] e possivelmente "REVISÃO_ESPECIAL"
+
 def caminho_contador(projeto_num: str) -> str:
     os.makedirs(JSON_CONTADORES_DIR, exist_ok=True)
     return os.path.join(JSON_CONTADORES_DIR, f"contador_entregas_{projeto_num}.json")
@@ -259,17 +271,95 @@ def pos_processamento(*args):
     messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
     sys.exit(0)
 
+
+# -----------------------------------------------------
+# FUNÇÕES DE TOKENIZAÇÃO E VALIDAÇÃO 
+# -----------------------------------------------------
+def split_including_separators(nome_sem_ext: str, nomenclatura: dict) -> list[str]:
+    tokens: list[str] = []
+    i = 0
+    while i < len(nome_sem_ext):
+        c = nome_sem_ext[i]
+        if c in ['-', '.']:
+            tokens.append(c)
+            i += 1
+        else:
+            j = i
+            while j < len(nome_sem_ext) and nome_sem_ext[j] not in ['-', '.']:
+                j += 1
+            tokens.append(nome_sem_ext[i:j])
+            i = j
+    return tokens
+
+def verificar_tokens(tokens: list[str], nomenclatura: dict) -> list[str]:
+    if not nomenclatura or "campos" not in nomenclatura:
+        return ["mismatch"] * len(tokens)
+
+    campos_cfg = nomenclatura["campos"]
+    tokens_esperados: list[tuple[str, dict | str]] = []
+    for idx, cinfo in enumerate(campos_cfg):
+        tokens_esperados.append(("campo", cinfo))
+        if idx < len(campos_cfg) - 1:
+            sep_ = cinfo.get("separador", "-")
+            tokens_esperados.append(("sep", sep_))
+
+    result_tags: list[str] = []
+    idx_exp = 0
+    idx_tok = 0
+
+    while idx_tok < len(tokens) and idx_exp < len(tokens_esperados):
+        t = tokens[idx_tok]
+        tipo_esp, conteudo_esp = tokens_esperados[idx_exp]
+
+        if tipo_esp == "sep":
+            if t == conteudo_esp:
+                result_tags.append("ok")
+            else:
+                result_tags.append("mismatch")
+            idx_tok += 1
+            idx_exp += 1
+        else:
+            cinfo = conteudo_esp
+            tipo_campo = cinfo.get("tipo", "Fixo")
+            fixos = cinfo.get("valores_fixos", [])
+            if tipo_campo == "Fixo" and fixos:
+                lista_val_permitido = []
+                for f in fixos:
+                    if isinstance(f, dict):
+                        lista_val_permitido.append(f.get("value", ""))
+                    else:
+                        lista_val_permitido.append(str(f))
+                if lista_val_permitido and t not in lista_val_permitido:
+                    result_tags.append("mismatch")
+                else:
+                    result_tags.append("ok")
+            else:
+                result_tags.append("ok")
+            idx_tok += 1
+            idx_exp += 1
+
+    while idx_tok < len(tokens):
+        result_tags.append("mismatch")
+        idx_tok += 1
+    while idx_exp < len(tokens_esperados):
+        result_tags.append("missing")
+        idx_exp += 1
+
+    return result_tags
+
+
+# -----------------------------------------------------
+# FLUXO DE JANELAS DO PRIMEIRO CÓDIGO
+# -----------------------------------------------------
 def janela_selecao_projeto(master):
     root = master
     root.title("Selecionar Projeto")
     root.geometry("600x400")
     projetos_dict = carregar_projetos()
-    style = ttkbootstrap.Style(theme="flatly")
     if not projetos_dict:
         messagebox.showerror("Erro", "Nenhum projeto encontrado ou erro no arquivo JSON.")
-        Disciplinas_Detalhes_Projeto(sel["numero"], sel["caminho"], master=root)
-        root.destroy()
         return None, None
+
     p_conv = []
     for num, c_full in projetos_dict.items():
         nm = os.path.basename(c_full)
@@ -294,8 +384,9 @@ def janela_selecao_projeto(master):
         v = tree.item(si[0], "values")
         sel["numero"] = v[0]
         sel["caminho"] = v[2]
-        root.withdraw() 
+        root.withdraw()
         Disciplinas_Detalhes_Projeto(sel["numero"], sel["caminho"], master=root)
+
     frame = tk.Frame(root)
     frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
     tk.Label(frame, text="Digite nome ou parte do nome do projeto:", font=("Arial", 10)).pack(anchor="w")
@@ -303,6 +394,7 @@ def janela_selecao_projeto(master):
     entrada.pack(fill=tk.X)
     entrada.bind("<KeyRelease>", filtrar)
     entrada.bind("<Return>", lambda e: confirmar())
+
     cols = ("Número", "Nome do Projeto", "Caminho Original")
     tree = ttk.Treeview(frame, columns=cols, show="headings", height=10)
     tree.heading("Número", text="Número")
@@ -312,31 +404,43 @@ def janela_selecao_projeto(master):
     tree.column("Nome do Projeto", width=300)
     tree.column("Caminho Original", width=0, stretch=False, minwidth=0)
     tree.pack(fill=tk.BOTH, expand=True)
+
     for n, nm, co in p_conv:
         tree.insert("", tk.END, values=(n, nm, co))
+
     bf = tk.Frame(frame)
     bf.pack(pady=5)
-    ttk.Button(bf, text="Confirmar", command=confirmar, bootstyle="success").pack(side=tk.LEFT, padx=5)
-    ttk.Button(bf, text="Cancelar", command=root.destroy, bootstyle="danger").pack(side=tk.LEFT, padx=5)
+    ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.LEFT, padx=5)
+    ttk.Button(bf, text="Cancelar", command=root.destroy).pack(side=tk.LEFT, padx=5)
     root.mainloop()
     return sel["numero"], sel["caminho"]
+
 
 def Disciplinas_Detalhes_Projeto(numero, caminho, master=None):
     d_path = os.path.join(caminho, "3 Desenvolvimento")
     if not os.path.exists(d_path):
         messagebox.showerror("Erro", "A pasta de disciplinas não foi encontrada.")
         return
-    nj = tk.Toplevel(master)
-    nj.title(f"Gerenciador de Projetos - Projeto {numero}")
-    nj.geometry("900x600")
-    hd = tk.Label(nj, text=f"Projeto {numero} - Selecione a disciplina para entrega", font=("Helvetica", 14, "bold"), anchor="w")
+
+    discip_win = tk.Toplevel(master)
+    discip_win.title(f"Gerenciador de Projetos - Projeto {numero}")
+    discip_win.geometry("900x600")
+
+    hd = tk.Label(
+        discip_win,
+        text=f"Projeto {numero} - Selecione a disciplina para entrega",
+        font=("Helvetica", 14, "bold"),
+        anchor="w"
+    )
     hd.pack(fill=tk.X, padx=10, pady=5)
+
     cols = ["Nome", "Data de Modificação", "Tipo", "Tamanho"]
-    tree = ttk.Treeview(nj, columns=cols, show="headings", height=20)
+    tree = ttk.Treeview(discip_win, columns=cols, show="headings", height=20)
     tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     for c in cols:
         tree.heading(c, text=c)
-        tree.column(c, width=200 if c=="Nome" else 150, anchor="w")
+        tree.column(c, width=200 if c == "Nome" else 150, anchor="w")
+
     disc = []
     for it in os.listdir(d_path):
         fp = os.path.join(d_path, it)
@@ -357,9 +461,13 @@ def Disciplinas_Detalhes_Projeto(numero, caminho, master=None):
         if not os.path.isdir(p_disc):
             messagebox.showerror("Erro", f"A pasta da disciplina '{p_disc}' não foi encontrada.")
             return
+
         expected_folder = "1.ENTREGAS"
         match_entrega = None
-        def normalize(n): return n.lower().replace(" ", "").replace("-", "").replace("_", "").replace(".", "")
+
+        def normalize(n):
+            return n.lower().replace(" ", "").replace("-", "").replace("_", "").replace(".", "")
+
         for folder in os.listdir(p_disc):
             if normalize(folder) == normalize(expected_folder):
                 match_entrega = folder
@@ -367,14 +475,20 @@ def Disciplinas_Detalhes_Projeto(numero, caminho, master=None):
         if not match_entrega:
             messagebox.showerror("Erro", f"A pasta de entrega '{expected_folder}' não foi encontrada.")
             return
+
         p_ent = os.path.join(p_disc, match_entrega)
         if not os.path.isdir(p_ent):
             messagebox.showerror("Erro", f"A pasta de entrega '{p_ent}' não pôde ser acessada.")
             return
-        sel_arq = filedialog.askopenfilenames(title="Selecione arquivos para entrega", initialdir=p_ent)
+
+        sel_arq = filedialog.askopenfilenames(
+            title="Selecione arquivos para entrega",
+            initialdir=p_ent
+        )
         if not sel_arq:
             messagebox.showwarning("Atenção", "Nenhum arquivo foi selecionado.")
             return
+
         proc = []
         for arq in sel_arq:
             n_arq = os.path.basename(arq)
@@ -384,19 +498,27 @@ def Disciplinas_Detalhes_Projeto(numero, caminho, master=None):
         if not proc:
             messagebox.showerror("Erro", "Nenhum dado foi processado.")
             return
-        nj.destroy()
-        exibir_interface_tabela(numero, arquivos_previos=proc, caminho_projeto=caminho, pasta_entrega=p_ent)
+
+        discip_win.destroy()
+        exibir_interface_tabela(
+            numero,
+            arquivos_previos=proc,
+            caminho_projeto=caminho,
+            pasta_entrega=p_ent,
+            master=master
+        )
 
     def voltar():
-        nj.destroy()
-        master.deiconify()
-    cf = tk.Frame(nj, bg="#f5f5f5", padx=20, pady=20)
+        discip_win.destroy()
+        if master is not None:
+            master.deiconify()
+
+    cf = tk.Frame(discip_win, bg="#f5f5f5", padx=20, pady=20)
     cf.pack(fill=tk.BOTH, expand=True)
-    bf = tk.Frame(nj)
+    bf = tk.Frame(discip_win)
     bf.pack(fill=tk.X, pady=5, padx=10)
-    ttk.Button(bf, text="Voltar", command=voltar, bootstyle="warning").pack(side=tk.LEFT, padx=5)
-    ttk.Button(bf, text="Confirmar Seleção", command=confirmar_selecao_arquivos, bootstyle="success").pack(side=tk.RIGHT, padx=5)
-    nj.mainloop()
+    ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
+    ttk.Button(bf, text="Confirmar Seleção", command=confirmar_selecao_arquivos).pack(side=tk.RIGHT, padx=5)
 
 def carregar_json(fp):
     if os.path.exists(fp):
@@ -467,24 +589,36 @@ def extrair_dados_arquivo(nome_arquivo):
         }
     return d
 
-def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None, pasta_entrega=None, master=None):
-    j = tk.Toplevel(master)
-    j.title(f"Gerenciador de Projetos - Projeto {numero}")
-    j.geometry("1200x800")
-    fpr = tk.Frame(j)
+def exibir_interface_tabela(
+    numero: str,
+    arquivos_previos: list[dict] | None = None,
+    caminho_projeto: str | None = None,
+    pasta_entrega: str | None = None,
+    master=None
+):
+    exibir_win = tk.Toplevel(master)
+    exibir_win.title(f"Gerenciador de Projetos - Projeto {numero}")
+    exibir_win.geometry("1200x800")
+
+    fpr = tk.Frame(exibir_win)
     fpr.pack(fill=tk.BOTH, expand=True)
+
     bar_l = tk.Frame(fpr, bg="#2c3e50", width=200)
     bar_l.pack(side=tk.LEFT, fill=tk.Y)
-    lbl_t = tk.Label(bar_l, text="OAE - Engenharia", font=("Helvetica",14,"bold"), bg="#2c3e50", fg="white")
+    lbl_t = tk.Label(bar_l, text="OAE - Engenharia", font=("Helvetica",14,"bold"),
+                     bg="#2c3e50", fg="white")
     lbl_t.pack(pady=10)
-    lbl_pj = tk.Label(bar_l, text="PROJETOS", font=("Helvetica",10,"bold"), bg="#34495e", fg="white", anchor="w", padx=10)
+    lbl_pj = tk.Label(bar_l, text="PROJETOS", font=("Helvetica",10,"bold"),
+                      bg="#34495e", fg="white", anchor="w", padx=10)
     lbl_pj.pack(fill=tk.X, pady=5)
     ls_pj = tk.Listbox(bar_l, height=5, bg="#ecf0f1", font=("Helvetica",9))
     ls_pj.pack(fill=tk.X, padx=10, pady=5, anchor="center")
-    ls_pj.insert(tk.END, "Projeto ", numero)
-    lbl_m = tk.Label(bar_l, text="MEMBROS", font=("Helvetica",10,"bold"), bg="#34495e", fg="white", anchor="w", padx=10)
+    ls_pj.insert(tk.END, f"Projeto {numero}")
+    lbl_m = tk.Label(bar_l, text="MEMBROS", font=("Helvetica",10,"bold"),
+                     bg="#34495e", fg="white", anchor="w", padx=10)
     lbl_m.pack(fill=tk.X, pady=5)
     bar_l.pack_propagate(False)
+
     cp = tk.Frame(fpr)
     cp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
@@ -500,14 +634,27 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
         if not la:
             messagebox.showinfo("Aviso", "Nenhum arquivo adicionado para análise.")
         else:
-            j.destroy()
-            tela_analise_nomenclatura(la, pasta_entrega=pasta_entrega)
-    lbl_i = tk.Label(cp, text="Adicionar Arquivos para Entrega", font=("Helvetica",15,"bold"), anchor="w")
+            # em vez de destruir, apenas ocultamos esta janela
+            exibir_win.withdraw()
+            tela_analise_nomenclatura(
+                numero,              # passamos o número do projeto
+                la,
+                pasta_entrega=pasta_entrega,
+                master=exibir_win
+            )
+
+    lbl_i = tk.Label(cp, text="Adicionar Arquivos para Entrega",
+                     font=("Helvetica",15,"bold"), anchor="w")
     lbl_i.place(x=10, y=10)
+
     fb = tk.Frame(cp)
     fb.pack(side=tk.TOP, anchor="ne", pady=10, padx=10)
-    ttk.Button(fb, text="Fazer análise da Nomenclatura", command=fazer_analise_nomenclatura).pack(side=tk.LEFT, padx=5)
-    cols = ["Status","Nome do Arquivo","Extensão","Nº do Arquivo","Fase","Tipo","Revisão","Modificação","Modificado por","Entrega","caminho"]
+    ttk.Button(fb, text="Fazer análise da Nomenclatura",
+               command=fazer_analise_nomenclatura).pack(side=tk.LEFT, padx=5)
+
+    cols = ["Status","Nome do Arquivo","Extensão","Nº do Arquivo",
+            "Fase","Tipo","Revisão","Modificação","Modificado por",
+            "Entrega","caminho"]
     tabela = ttk.Treeview(cp, columns=cols, show="headings", height=20)
     for c in cols:
         tabela.heading(c, text=c)
@@ -517,16 +664,24 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
             tabela.column(c, width=0, stretch=False, minwidth=0)
         else:
             tabela.column(c, width=120)
-    tabela["displaycolumns"] = ("Status","Nome do Arquivo","Extensão","Nº do Arquivo","Fase","Tipo","Revisão","Modificação","Modificado por","Entrega")
+
+    # ocultamos a coluna "caminho" na exibição
+    tabela["displaycolumns"] = (
+        "Status","Nome do Arquivo","Extensão","Nº do Arquivo",
+        "Fase","Tipo","Revisão","Modificação","Modificado por","Entrega"
+    )
     tabela.pack(fill=tk.BOTH, expand=True)
+
     if arquivos_previos:
         for d_ext in arquivos_previos:
             tabela.insert("", tk.END, values=(
                 d_ext.get("Status",""), d_ext.get("Nome do Arquivo",""), d_ext.get("Extensão",""),
                 d_ext.get("N° do Arquivo",""), d_ext.get("Fase",""), d_ext.get("Tipo de Documento",""),
-                d_ext.get("Revisão",""), d_ext.get("Modificação",""), d_ext.get("Modificado por",""), "", d_ext.get("caminho","")
+                d_ext.get("Revisão",""), d_ext.get("Modificação",""), d_ext.get("Modificado por",""),
+                "",  # campo "Entrega" temporário
+                d_ext.get("caminho","")
             ))
-            
+
     def adicionar_arquivos():
         ar = filedialog.askopenfilenames(title="Selecione arquivos")
         for a in ar:
@@ -535,8 +690,10 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
             dx["caminho"] = a
             tabela.insert("", tk.END, values=(
                 dx.get("Status",""), dx.get("Nome do Arquivo",""), dx.get("Extensão",""),
-                dx.get("N° do Arquivo",""), dx.get("Fase",""), dx.get("Tipo de Documento",""),
-                dx.get("Revisão",""), dx.get("Modificação",""), dx.get("Modificado por",""), "", dx.get("caminho","")
+                dx.get("N° do Documento",""), dx.get("Fase",""), dx.get("Tipo de Documento",""),
+                dx.get("Revisão",""), dx.get("Modificação",""), dx.get("Modificado por",""),
+                "",  # campo "Entrega"
+                dx.get("caminho","")
             ))
 
     def remover_arquivo():
@@ -548,28 +705,347 @@ def exibir_interface_tabela(numero, arquivos_previos=None, caminho_projeto=None,
             messagebox.showinfo("Informação", "Nenhum item selecionado.")
 
     def voltar():
-        j.destroy()
-        master.deiconify()
+        exibir_win.destroy()
+        if master is not None:
+            master.deiconify()
+
     bf2 = tk.Frame(cp)
     bf2.pack(side=tk.LEFT, pady=10, padx=10)
     ttk.Button(bf2, text="Adicionar Arquivo", command=adicionar_arquivos).pack(side=tk.LEFT, padx=5)
     ttk.Button(bf2, text="Remover Arquivo", command=remover_arquivo).pack(side=tk.LEFT, padx=5)
+
     bf3 = tk.Frame(cp)
     bf3.pack(side="bottom", anchor="e", pady=5, padx=10)
     ttk.Button(bf3, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
-    ttk.Button(bf3, text="Sair", command=j.destroy).pack(side=tk.RIGHT, padx=5)
+    ttk.Button(bf3, text="Sair", command=exibir_win.destroy).pack(side=tk.RIGHT, padx=5)
+
+
+def tela_analise_nomenclatura(projeto_num: str, lista_arquivos: list[dict], pasta_entrega: str, master=None):
+    logging.debug(">>> INDO PARA tela_analise_nomenclatura: projeto=%s, pasta_entrega=%s, total_arquivos=%d", projeto_num, pasta_entrega, len(lista_arquivos))
+    esquema = carregar_regras_nomenclatura(projeto_num)
+
+    logging.debug("… regras de nomenclatura carregadas: %s", esquema.get("campos", []))
+
+    token_win = tk.Toplevel(master)
+    token_win.title("Verificação de Nomenclatura (Tokens)")
+    token_win.geometry("1200x700")
+
+    lbl_instr = tk.Label(
+        token_win,
+        text="Confira a nomenclatura quebrada em tokens. Linhas em VERMELHO têm tokens incorretos; AMARELO, tokens faltando.",
+        font=("Helvetica",12)
+    )
+    lbl_instr.pack(pady=MARGIN_SIZE)
+
+    frm_botoes = tk.Frame(token_win)
+    frm_botoes.pack(fill=tk.X, padx=10, pady=5)
+
+    # Botão “Mostrar Padrão” agora chama a versão modificada, que reconstrói o nome usando
+    # o arquivo selecionado no Treeview e insere os separadores corretos.
+    btn_mostrar = tk.Button(
+        frm_botoes,
+        text="Mostrar Padrão",
+        command=lambda: mostrar_nomenclatura_padrao(esquema, lista_arquivos, tree, lista_tokens_por_arquivo, master=token_win)
+    )
+    btn_mostrar.pack(side=tk.LEFT, padx=5)
+
+    btn_voltar = tk.Button(
+        frm_botoes,
+        text="Voltar",
+        command=lambda: (_voltar_para_exibir(token_win, master))
+    )
+    btn_voltar.pack(side=tk.LEFT, padx=5)
+
+    btn_avancar = tk.Button(
+        frm_botoes,
+        text="Avançar",
+        command=lambda: (_tentar_avancar(token_win, esquema, lista_arquivos, pasta_entrega))
+    )
+    btn_avancar.pack(side=tk.RIGHT, padx=5)
+
+    # --- monta lista de tokens para cada arquivo ---
+    max_tokens = 0
+    lista_tokens_por_arquivo: list[list[str]] = []
+    for a in lista_arquivos:
+        nome = a.get("Nome do Arquivo", "")
+        nome_sem_ext, _ = os.path.splitext(nome)
+        tokens = split_including_separators(nome_sem_ext, esquema)
+        lista_tokens_por_arquivo.append(tokens)
+        if len(tokens) > max_tokens:
+            max_tokens = len(tokens)
+
+    col_names = [f"T{i}" for i in range(1, max_tokens + 1)]
+    frame_tv = tk.Frame(token_win)
+    frame_tv.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+    sb_y = tk.Scrollbar(frame_tv, orient="vertical")
+    sb_y.pack(side=tk.RIGHT, fill=tk.Y)
+    tree = ttk.Treeview(
+        frame_tv,
+        columns=col_names,
+        show="headings",
+        yscrollcommand=sb_y.set
+    )
+    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    sb_y.config(command=tree.yview)
+
+    for cn in col_names:
+        tree.heading(cn, text="")
+        tree.column(cn, width=80, anchor="center")
+
+    tree.tag_configure("ok",       background="white")
+    tree.tag_configure("mismatch", background="#FF9999")
+    tree.tag_configure("missing",  background="#FFFF99")
+
+    for idx, a in enumerate(lista_arquivos):
+        tokens = lista_tokens_por_arquivo[idx]
+        tags_result = verificar_tokens(tokens, esquema)
+
+        row_vals = []
+        row_tags = []
+        for i in range(max_tokens):
+            if i < len(tokens):
+                row_vals.append(tokens[i])
+            else:
+                row_vals.append("")
+
+            if i < len(tags_result):
+                if tags_result[i] == "mismatch":
+                    row_tags.append("mismatch")
+                elif tags_result[i] == "missing":
+                    row_tags.append("missing")
+                else:
+                    row_tags.append("ok")
+            else:
+                row_tags.append("missing")
+
+        if any(tg == "mismatch" for tg in row_tags):
+            tag_linha = "mismatch"
+        elif any(tg == "missing" for tg in row_tags):
+            tag_linha = "missing"
+        else:
+            tag_linha = "ok"
+
+        tree.insert("", tk.END, values=row_vals, tags=(tag_linha,))
+
+    def mostrar_nomenclatura_padrao(nomenclatura_json: dict, lista_arquivos: list[dict], treeview: ttk.Treeview, lista_tokens_por_arquivo: list[list[str]], master=None):
+        sel = treeview.selection()
+        if not sel:
+            messagebox.showinfo("Info", "Selecione uma linha para ver o padrão.")
+            return
+
+        # índice da linha selecionada
+        idx = treeview.index(sel[0])
+
+        # 1) obtém tokens completos (incluindo separadores) do arquivo
+        tokens_com_seps = lista_tokens_por_arquivo[idx]
+
+        # 2) extrai apenas os “valores” (filtrando todos os separadores '-' e '.')
+        valores = [t for t in tokens_com_seps if t not in ['-', '.']]
+
+        # 3) núm. de campos (sem contar revisão)
+        campos_cfg = nomenclatura_json.get("campos", [])
+        num_campos = len(campos_cfg)
+
+        # 4) separa os valores que correspondem aos campos (0 até num_campos-1)
+        #    e, se sobrar, considera o próximo como token de revisão
+        valores_campos = valores[:num_campos]
+        if len(valores) > num_campos:
+            rev_token = valores[num_campos]
+        else:
+            # se não veio revisão no nome, criamos um valor padrão “1” ou “A…” igual ao preview
+            rev_opcao    = nomenclatura_json.get("revisao_opcao", "Numérico")
+            ndig         = nomenclatura_json.get("revisao_ndigitos", 2)
+            prefixo      = nomenclatura_json.get("revisao_prefixo", "R")
+            if rev_opcao == "Numérico":
+                corpo = "1".rjust(ndig, "0")
+            else:
+                corpo = "A" * ndig
+            rev_token = prefixo + corpo
+
+        # 5) Reconstrói a string usando o valor de cada campo + separador correto
+        partes = []
+        for i, cinfo in enumerate(campos_cfg):
+            # se não houver valor (campo ausente), deixamos em branco
+            val_i = valores_campos[i] if i < len(valores_campos) else ""
+            sep_i = cinfo.get("separador", "")
+            partes.append(val_i)
+            # só coloca separador se não for o último campo
+            if i < num_campos - 1:
+                partes.append(sep_i)
+
+        # 6) acrescenta a parte de revisão
+        sep_rev    = nomenclatura_json.get("revisao_separador", "-")
+        prefixo    = nomenclatura_json.get("revisao_prefixo", "R")
+        # caso o rev_token não tenha prefixo, anexamos
+        if not rev_token.startswith(prefixo):
+            rev_token = prefixo + rev_token
+        partes.append(sep_rev + rev_token)
+
+        nome_corrigido = "".join(partes)
+
+        # 7) exibe numa janela para o usuário
+        win = tk.Toplevel(master)
+        win.title("Padrão Correto do Arquivo Selecionado")
+        win.geometry("800x200")
+        ttk.Label(win, text="Nome corrigido para este arquivo:", font=("Arial", 11, "bold")).pack(pady=10)
+        txt = tk.Text(win, height=2, wrap="none", font=("Courier New", 12))
+        txt.insert("1.0", nome_corrigido)
+        txt.config(state="disabled")
+        txt.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        ttk.Button(win, text="Fechar", command=win.destroy).pack(pady=5)
+
+    def _voltar_para_exibir(token_window, exibir_window):
+        token_window.destroy()
+        exibir_window.deiconify()
+
+    def _tentar_avancar(token_window, esquema_json, lista_arquivos_av, pasta_entrega):
+        # validação de tokens
+        for iid in tree.get_children():
+            tags_ = tree.item(iid, "tags")
+            if "mismatch" in tags_ or "missing" in tags_:
+                messagebox.showwarning(
+                    "Atenção",
+                    "Há arquivos com tokens incorretos (VERMELHO) ou faltando (AMARELO).\n"
+                    "Corrija o nome do arquivo (no sistema de arquivos) e volte para reanalisar."
+                )
+                return
+
+        try:
+            logging.debug(">>> _tentar_avancar: abrindo modal de tipo")
+            # Em vez de ocultar:
+            # token_window.withdraw()
+            token_window.attributes('-disabled', True)
+
+            def _on_tipo_escolhido(tipo):
+                # reabilita a janela de tokens (caso ela precise ser mostrada depois)
+                token_window.attributes('-disabled', False)
+                token_window.withdraw()           # agora sim pode esconder
+                tela_verificacao_revisao(
+                    lista_arquivos_av,
+                    pasta_entrega,
+                    tipo,
+                    master=token_window
+                )
+
+            # abre modal
+            modal_tipo_entrega(token_window, on_confirm=_on_tipo_escolhido)
+
+        except Exception:
+            logging.exception("Falha em _tentar_avancar")
+            messagebox.showerror("Erro", "Falha interna. Veja debug_entregas.log.")
+
+def modal_tipo_entrega(master, on_confirm):
+    logging.debug(">>> INDO PARA modal_tipo_entrega")
+    win = tk.Toplevel(master)
+    win.title("Tipo de Entrega")
+    win.transient(master)
+    win.grab_set()
+    win.resizable(False, False)
+    win.minsize(300, 140)
+    master.update_idletasks()
+    x = master.winfo_rootx() + master.winfo_width() // 2 - 150
+    y = master.winfo_rooty()  + master.winfo_height() // 2 - 70
+    win.geometry(f"+{x}+{y}")
+
+    ttk.Label(win, text="Escolha o tipo de entrega:", font=("Arial", 11, "bold")).pack(
+        pady=(12, 6), anchor="w", padx=20
+    )
+    var = tk.StringVar(value="AP")
+    frm = ttk.Frame(win)
+    frm.pack(padx=20, pady=5, anchor="w")
+    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var).pack(anchor="w")
+    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var).pack(anchor="w")
+    ttk.Separator(win).pack(fill="x", pady=10, padx=5)
+    ttk.Button(
+        win,
+        text="Confirmar",
+        command=lambda: (win.grab_release(), win.destroy(), on_confirm(var.get()))
+    ).pack(pady=(0,12))
+
+
+def tela_verificacao_revisao(lista_arquivos: list[dict], pasta_entrega: str, tipo: str, master=None):
+    logging.debug(">>> INDO PARA tela_verificacao_revisao: tipo=%s, pasta_entrega=%s, num_arquivos=%d", tipo, pasta_entrega, len(lista_arquivos))
+
+    arrv, aobs = identificar_revisoes(lista_arquivos)
+
+    logging.debug("…arquivos revisados: %s | obsoletos: %s", [a["Nome do Arquivo"] for a in arrv], [a["Nome do Arquivo"] for a in aobs])
+    
+    rev_win = tk.Toplevel(master)
+    rev_win.title("Verificação de Revisão")
+    rev_win.geometry("1000x700")
+
+    lb_i = tk.Label(rev_win, text="Confira os arquivos revisados e obsoletos antes da entrega.")
+    lb_i.pack(pady=10)
+
+    fr_r = tk.LabelFrame(rev_win, text="Arquivos Revisados")
+    fr_r.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    tr_r = ttk.Treeview(fr_r, columns=["Nome do Arquivo","Revisão"], show="headings", height=10)
+    tr_r.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    tr_r.heading("Nome do Arquivo", text="Nome do Arquivo")
+    tr_r.heading("Revisão", text="Revisão")
+    for a in arrv:
+        tr_r.insert("", tk.END, values=(a["Nome do Arquivo"], a["Revisão"]))
+
+    fr_o = tk.LabelFrame(rev_win, text="Arquivos Obsoletos")
+    fr_o.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    tr_o = ttk.Treeview(fr_o, columns=["Nome do Arquivo","Revisão"], show="headings", height=10)
+    tr_o.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    tr_o.heading("Nome do Arquivo", text="Nome do Arquivo")
+    tr_o.heading("Revisão", text="Revisão")
+    for a in aobs:
+        tr_o.insert("", tk.END, values=(a["Nome do Arquivo"], a["Revisão"]))
+
+    def voltar():
+        rev_win.destroy()
+        if master is not None:
+            master.deiconify()
+
+    def confirmar():
+        try:
+            caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
+            pasta_raiz_entregas = Path(pasta_entrega)
+            nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
+            messagebox.showinfo(
+                "Sucesso",
+                f"Nova entrega criada:\n{nova}\n"
+                "_controle_entrega.json gerado com o status dos arquivos."
+            )
+            rev_win.destroy()
+            if master is not None:
+                master.destroy()
+            sys.exit(0)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar entrega:\n{e}")
+
+    bf = tk.Frame(rev_win)
+    bf.pack(side="bottom", anchor="e", pady=5, padx=10)
+    ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
+    ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.RIGHT, padx=5)
+    ttk.Button(rev_win, text="Fechar", command=rev_win.destroy).pack(pady=10)
+
+    rev_win.mainloop()
+
+def _lista_erros_treeview(erros):
+    w = tk.Toplevel()
+    w.title("Lista de erros")
+    tree = ttk.Treeview(w, columns=["e"], show="headings", height=10)
+    tree.heading("e", text="Ocorrências")
+    tree.pack(fill="both", expand=True, padx=10, pady=10)
+    for e in erros:
+        tree.insert("", "end", values=(e,))
+    ttk.Button(w, text="Fechar", command=w.destroy).pack(pady=5)
 
 def identificar_revisoes(lista_arquivos):
     grupos = {}
     for a in lista_arquivos:
         nb, _ = os.path.splitext(a["Nome do Arquivo"])
         t = nb.split("-")
-        if len(t)<2: continue
+        if len(t)<2:
+            continue
         idf = "-".join(t[:-1])
         rev = t[-1] if t[-1].startswith("R") and t[-1][1:].isdigit() else "R00"
-        if idf not in grupos:
-            grupos[idf] = []
-        grupos[idf].append((rev, a))
+        grupos.setdefault(idf, []).append((rev, a))
     arrv = []
     aobs = []
     for idf, arqs in grupos.items():
@@ -579,140 +1055,14 @@ def identificar_revisoes(lista_arquivos):
         aobs.extend([q[1] for q in arqs[:-1]])
     return arrv, aobs
 
-def tela_analise_nomenclatura(lista_arquivos, pasta_entrega: str, master=None):
-    rnom = carregar_regras_nomenclatura()
-    j = tk.Toplevel(master)
-    j.title("Verificação de Nomenclatura")
-    j.geometry("1400x800")
-    lb_i = tk.Label(j, text="Confira a nomenclatura. Clique no nome para editar campos. Corrija antes de avançar, se necessário.", font=("Helvetica",12))
-    lb_i.pack(pady=MARGIN_SIZE)
-    fm = tk.Frame(j)
-    fm.pack(fill=tk.BOTH, expand=True)
-    cnv = tk.Canvas(fm)
-    cnv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    sb = tk.Scrollbar(fm, orient="vertical", command=cnv.yview)
-    sb.pack(side=tk.RIGHT, fill=tk.Y)
-    cnv.configure(yscrollcommand=sb.set)
-    cont = tk.Frame(cnv, bg="#ECE2E2")
-    c_id = cnv.create_window((0,0), window=cont, anchor="n")
-
-    def on_conf(event):
-        cnv.configure(scrollregion=cnv.bbox("all"))
-        w = event.width
-        cnv.itemconfig(c_id, width=w)
-    cnv.bind("<Configure>", on_conf)
-    fields_in_error = set()
-    expanded_cards = set()
-    CMPS = ["Status","Cliente","N° do Projeto","Organização","Sigla da Disciplina","Fase","Tipo de Documento","Conjunto","N° do Documento","Bloco","Pavimento","Subsistema","Tipo do Desenho","Revisão"]
-    
-    def expand_or_collapse(cid):
-        if cid in expanded_cards:
-            expanded_cards.remove(cid)
-        else:
-            expanded_cards.add(cid)
-        render_cards()
-
-    def validate_with_json_rules(campo, val):
-        if campo not in rnom: return (True,"")
-        rg = rnom[campo]
-        val = val.strip()
-        if rg.get("obrigatorio",False) and not val:
-            return (False,"Campo obrigatório.")
-        vo = rg.get("valores_permitidos",[])
-        if vo and val not in vo and val!="":
-            return (False,f"Valor inválido para {campo}. Opções: {vo}")
-        vf = rg.get("valor_fixo")
-        if vf and val!=vf:
-            return (False,f"Valor fixo exigido: {vf}")
-        import re
-        pt = rg.get("regex")
-        if pt and val!="":
-            if not re.match(pt,val):
-                return (False,f"O valor '{val}' não atende ao regex: {pt}")
-        return (True,"")
-    
-    def validate_entry(ev, campo, lbl_e):
-        tv = ev.get().strip()
-        iv, me = validate_with_json_rules(campo, tv)
-        if not iv:
-            lbl_e.config(text=me, fg="red")
-            fields_in_error.add((campo,lbl_e))
-        else:
-            lbl_e.config(text="", fg="red")
-            if (campo,lbl_e) in fields_in_error:
-                fields_in_error.remove((campo,lbl_e))
-
-    def render_cards():
-        for wdg in cont.winfo_children():
-            wdg.destroy()
-        for idx,a in enumerate(lista_arquivos):
-            c_id2 = idx
-            cf = tk.Frame(cont, bd=1, relief=tk.RIDGE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
-            cf.pack(padx=MARGIN_SIZE, pady=MARGIN_SIZE, fill=tk.X)
-            hb = ttk.Button(cf, text=a["Nome do Arquivo"], command=lambda c=c_id2: expand_or_collapse(c))
-            hb.pack(fill=tk.X)
-            if c_id2 in expanded_cards:
-                df = tk.Frame(cf, bd=1, relief=tk.GROOVE, padx=MARGIN_SIZE, pady=MARGIN_SIZE, bg="#ECE2E2")
-                df.pack(fill=tk.X)
-                rm, cm = 7, 2
-                idx_cp = 0
-                def mk_cb(vr,c,el):
-                    return lambda e: validate_entry(vr,c,el)
-                ca_arq = []
-                for n_campo in CMPS:
-                    ca_arq.append((n_campo, a.get(n_campo,"")))
-                for rr in range(rm):
-                    for cc in range(cm):
-                        if idx_cp<len(ca_arq):
-                            nm_cp, vl_cp = ca_arq[idx_cp]
-                            c_f = tk.Frame(df, bd=1, relief=tk.FLAT, bg="#ECE2E2")
-                            c_f.grid(row=rr, column=cc, padx=MARGIN_SIZE, pady=MARGIN_SIZE, sticky="nsew")
-                            lab = tk.Label(c_f, text=nm_cp+":", bg="#ECE2E2")
-                            lab.pack(anchor="w")
-                            vvar = tk.StringVar(value=vl_cp)
-                            err_lbl = tk.Label(c_f, text="", fg="red", bg="#ECE2E2")
-                            ent = tk.Entry(c_f, textvariable=vvar, width=30)
-                            ent.bind("<KeyRelease>", mk_cb(vvar,nm_cp,err_lbl))
-                            ent.pack(fill=tk.X)
-                            err_lbl.pack(anchor="w")
-                            def upd(*args,ac=a,field=nm_cp,v=vvar):
-                                ac[field] = v.get()
-                            vvar.trace("w",upd)
-                            idx_cp+=1
-                for rr in range(rm):
-                    df.rowconfigure(rr, weight=0)
-                for cc in range(cm):
-                    df.columnconfigure(cc, weight=1)
-    render_cards()
-    def ajustar_canvas():
-        j.update_idletasks()
-        w_at = cnv.winfo_width()
-        cnv.itemconfig(c_id, width=w_at)
-        cnv.configure(scrollregion=cnv.bbox("all"))
-    j.after(100, ajustar_canvas)
-
-    def avancar():
-        def on_confirm(tipo):
-            j.destroy()  # Fecha a janela da tela de análise de nomenclatura
-            tela_tipo_escolhido(lista_arquivos, pasta_entrega, tipo, master=master)
-        modal_tipo_entrega(j, on_confirm)
-    def voltar():
-        j.destroy()
-        master.deiconify()
-    bf = tk.Frame(j)
-    bf.pack(side="bottom", anchor="e", pady=MARGIN_SIZE, padx=MARGIN_SIZE)
-    ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
-    ttk.Button(bf, text="Avançar", command=avancar).pack(side=tk.RIGHT, padx=5)
-    j.mainloop()
-
-def criar_arquivo_excel_acumulativo(pasta_raiz_entregas: str):
+def criar_arquivo_controle(pasta_raiz_entregas: str):
     json_controle_path = os.path.join(pasta_raiz_entregas, "historico_entregas.json")
     if not os.path.exists(json_controle_path):
         print(f"[ATENÇÃO] histórico não existe em: {json_controle_path}")
         return
 
     with open(json_controle_path, "r", encoding="utf-8") as f:
-        historico = json.load(f)            # lista de entregas
+        historico = json.load(f)
 
     if not historico:
         print("[ATENÇÃO] Nenhuma entrega registrada.")
@@ -736,14 +1086,13 @@ def criar_arquivo_excel_acumulativo(pasta_raiz_entregas: str):
         ws.append(["Arquivo", "Revisão", "Status", "Caminho"])
         for arq in ent.get("arquivos_entregues", []):
             ws.append([
-                arq,                       # só o nome
-                ent.get("revisao", ""),    # opcional – se quiser guardar
-                ent.get("status", ""),     # idem
+                arq,
+                ent.get("revisao", ""),
+                ent.get("status", ""),
                 os.path.join(ent["pasta_entrega"], arq)
             ])
         ws.append([])
 
-    # formatação rápida
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
         for cell in row:
             if cell.row <= 3 or cell.column == 1:
@@ -752,122 +1101,17 @@ def criar_arquivo_excel_acumulativo(pasta_raiz_entregas: str):
         max_len = max(len(str(c.value)) if c.value else 0 for c in col)
         ws.column_dimensions[get_column_letter(col[0].column)].width = max_len + 2
 
-    # garante que a pasta existe e salva
     os.makedirs(pasta_raiz_entregas, exist_ok=True)
     caminho_excel = os.path.join(pasta_raiz_entregas, "GRD.xlsx")
     wb.save(caminho_excel)
     print(f"[INFO] GRD.xlsx atualizado em: {caminho_excel}")
 
-def modal_tipo_entrega(master, on_confirm):
-    win = tk.Toplevel(master)
-    win.title("Tipo de Entrega")
-    win.transient(master)
-    win.grab_set()
-    win.resizable(False, False)
-    win.minsize(300, 140)
-    master.update_idletasks()
-    x = master.winfo_rootx() + master.winfo_width() // 2 - 150
-    y = master.winfo_rooty()  + master.winfo_height() // 2 - 70
-    win.geometry(f"+{x}+{y}")
-    ttk.Label(win, text="Escolha o tipo de entrega:",
-              font=("Arial", 11, "bold")).pack(pady=(12, 6), anchor="w", padx=20)
-    var = tk.StringVar(value="AP")
-    frm = ttk.Frame(win); frm.pack(padx=20, pady=5, anchor="w")
-    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var).pack(anchor="w")
-    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var).pack(anchor="w")
-    ttk.Separator(win).pack(fill="x", pady=10, padx=5)
-    ttk.Button(win, text="Confirmar",
-               command=lambda:(win.grab_release(), win.destroy(),
-                               on_confirm(var.get()))).pack(pady=(0,12))
 
-def tela_tipo_escolhido(lista_arquivos, pasta_entrega: str, tipo: str, master=None):
-    # 1) validações básicas
-    erros = []
-    for a in lista_arquivos:
-        caminho = a.get("caminho")
-        nome    = a.get("Nome do Arquivo")
-        if not caminho or not Path(caminho).exists():
-            erros.append(f"Caminho ausente → {nome}")
-    if erros:
-        if len(erros) <= 3:
-            messagebox.showerror("Erros", "\n".join(erros))
-        else:
-            _lista_erros_treeview(erros)
-        return                           # bloqueia avanço
-
-    # 2) processa entrega
-    try:
-        tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=master)
-    except Exception as e:
-        logging.exception(e)
-        messagebox.showerror("Falha", str(e))
-
-def _lista_erros_treeview(erros):
-    w = tk.Toplevel(); w.title("Lista de erros")
-    tree = ttk.Treeview(w, columns=["e"], show="headings", height=10)
-    tree.heading("e", text="Ocorrências")
-    tree.pack(fill="both", expand=True, padx=10, pady=10)
-    for e in erros:
-        tree.insert("", "end", values=(e,))
-    ttk.Button(w, text="Fechar", command=w.destroy).pack(pady=5)
-
-def tela_verificacao_revisao(lista_arquivos, pasta_entrega, tipo, master=None):
-    arrv, aobs = identificar_revisoes(lista_arquivos)
-    j = tk.Toplevel(master)
-    j.title("Verificação de Revisão")
-    j.geometry("1000x700")
-    lb_i = tk.Label(j, text="Confira os arquivos revisados e obsoletos antes da entrega.")
-    lb_i.pack(pady=10)
-    fr_r = tk.LabelFrame(j, text="Arquivos Revisados")
-    fr_r.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    tr_r = ttk.Treeview(fr_r, columns=["Nome do Arquivo","Revisão"], show="headings", height=10)
-    tr_r.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    tr_r.heading("Nome do Arquivo", text="Nome do Arquivo")
-    tr_r.heading("Revisão", text="Revisão")
-    for a in arrv:
-        tr_r.insert("", tk.END, values=(a["Nome do Arquivo"], a["Revisão"]))
-    fr_o = tk.LabelFrame(j, text="Arquivos Obsoletos")
-    fr_o.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    tr_o = ttk.Treeview(fr_o, columns=["Nome do Arquivo","Revisão"], show="headings", height=10)
-    tr_o.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    tr_o.heading("Nome do Arquivo", text="Nome do Arquivo")
-    tr_o.heading("Revisão", text="Revisão")
-    for a in aobs:
-        tr_o.insert("", tk.END, values=(a["Nome do Arquivo"], a["Revisão"]))
-
-    def voltar():
-        j.destroy()
-        master.deiconify()
-
-    def confirmar():
-        try:
-            caminhos = [Path(a["caminho"]) for a in (arrv + aobs)]
-            pasta_raiz_entregas = Path(pasta_entrega)       
-            nova = processar_entrega_arquivos_tipo(caminhos, pasta_raiz_entregas, tipo)
-            criar_arquivo_excel_acumulativo(str(pasta_raiz_entregas))
-
-            messagebox.showinfo(
-                "Sucesso",
-                f"Nova entrega criada:\n{nova}\n"
-                "_controle_entrega.json gerado com o status dos arquivos.")
-            
-            j.destroy()
-
-            if master is not None:
-                master.destroy()
-            sys.exit(0)
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao processar entrega:\n{e}")
-
-    bf = tk.Frame(j)
-    bf.pack(side="bottom", anchor="e", pady=5, padx=10)
-    ttk.Button(bf, text="Voltar", command=voltar).pack(side=tk.LEFT, padx=5)
-    ttk.Button(bf, text="Confirmar", command=confirmar).pack(side=tk.RIGHT, padx=5)
-    ttk.Button(j, text="Fechar", command=j.destroy).pack(pady=10)
-    j.mainloop()
-
+# -----------------------------------------------------
+# EXECUÇÃO
+# -----------------------------------------------------
 if __name__ == "__main__":
-    root = tk.Tk()           # única raiz real
-    root.withdraw()          # se não quiser que apareça imediatamente
-    janela_selecao_projeto(root)   # primeira tela
+    root = tk.Tk()
+    root.withdraw()
+    janela_selecao_projeto(root)
     root.mainloop()
