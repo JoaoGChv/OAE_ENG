@@ -34,10 +34,6 @@
                     {
                         "value": "PETER_BAL",
                         "desc": ""
-                    },
-                    {
-                        "value": "OutroCliente",
-                        "desc": ""
                     }
                 ],
                 "valor_padrao": "PETER_BAL",
@@ -95,7 +91,7 @@
                         "desc": ""
                     }
                 ],
-                "valor_padrao": "ARQ",
+                "valor_padrao": "ELE",
                 "separador": "-"
             },
             {
@@ -110,13 +106,9 @@
                     {
                         "value": "EX",
                         "desc": ""
-                    },
-                    {
-                        "value": "OP",
-                        "desc": ""
                     }
                 ],
-                "valor_padrao": "EX",
+                "valor_padrao": "PE",
                 "separador": "-"
             },
             {
@@ -129,11 +121,7 @@
                         "desc": ""
                     },
                     {
-                        "value": "GT",
-                        "desc": ""
-                    },
-                    {
-                        "value": "PRJ",
+                        "value": "MEM",
                         "desc": ""
                     }
                 ],
@@ -146,11 +134,23 @@
                 "tipo": "Fixo",
                 "valores_fixos": [
                     {
+                        "value": "X",
+                        "desc": ""
+                    },
+                    {
+                        "value": "Y",
+                        "desc": ""
+                    },
+                    {
+                        "value": "Z",
+                        "desc": ""
+                    },
+                    {
                         "value": "G",
                         "desc": ""
                     }
                 ],
-                "valor_padrao": "G",
+                "valor_padrao": "X",
                 "separador": "."
             },
             {
@@ -182,6 +182,10 @@
                     {
                         "value": "IMP",
                         "desc": ""
+                    },
+                    {
+                        "value": "PIS",
+                        "desc": ""
                     }
                 ],
                 "valor_padrao": "IMP",
@@ -192,6 +196,18 @@
                 "nome": "PAVIMENTO",
                 "tipo": "Fixo",
                 "valores_fixos": [
+                    {
+                        "value": "1PAV",
+                        "desc": ""
+                    },
+                    {
+                        "value": "2PAV",
+                        "desc": ""
+                    },
+                    {
+                        "value": "3PAV",
+                        "desc": ""
+                    },
                     {
                         "value": "TER",
                         "desc": ""
@@ -220,6 +236,14 @@
                 "valores_fixos": [
                     {
                         "value": "PTB",
+                        "desc": ""
+                    },
+                    {
+                        "value": "COR",
+                        "desc": ""
+                    },
+                    {
+                        "value": "DET",
                         "desc": ""
                     }
                 ],

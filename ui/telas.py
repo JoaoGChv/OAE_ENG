@@ -9,8 +9,9 @@ import logging
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font
-from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.datavalidation import DataValidation
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
@@ -18,13 +19,15 @@ from typing import Optional, Dict
 # --------------------- CONFIGURAÇÕES ---------------------
 JSON_CONTADORES_DIR = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\JSON_tmp_joao"
 PROJETOS_JSON = r"G:\Drives compartilhados\OAE-JSONS\diretorios_projetos.json"
-# Pressupõe-se que 'nomenclaturas.json' fique no mesmo diretório deste script
 SCRIPT_DIR = Path(__file__).parent
 NOMENCLATURA_REGRAS_JSON = r"G:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\OAE_ENG\nomenclaturas.json"
 ULTIMO_DIRETORIO_JSON = "ultimo_diretorio.json"
 HISTORICO_JSON = "historico_arquivos.json"
 JSON_FILE_PATH = "dados_projetos.json"
 MARGIN_SIZE = 10
+TEMPLATE_XLSX = Path(__file__).with_name("GRD_template.xlsx")
+print("DEBUG-PATH:", TEMPLATE_XLSX)
+
 
 LOG_FILENAME = "debug_entregas.log"
 logging.basicConfig(
@@ -164,7 +167,7 @@ def processar_entrega_arquivos_tipo(arquivos: list[Path], pasta_entregas: Path, 
         "arquivos_entregues": [src.name for src in arquivos],
     }
     salvar_historico_global_entregas(pasta_entregas, registro_historico)
-    
+
     try:
         criar_arquivo_controle(pasta_entregas)
         logging.debug("GRD.xlsx atualizado em %s", pasta_entregas)
@@ -349,7 +352,7 @@ def verificar_tokens(tokens: list[str], nomenclatura: dict) -> list[str]:
 
 
 # -----------------------------------------------------
-# FLUXO DE JANELAS DO PRIMEIRO CÓDIGO
+# FLUXO DE JANELAS
 # -----------------------------------------------------
 def janela_selecao_projeto(master):
     root = master
@@ -634,7 +637,6 @@ def exibir_interface_tabela(
         if not la:
             messagebox.showinfo("Aviso", "Nenhum arquivo adicionado para análise.")
         else:
-            # em vez de destruir, apenas ocultamos esta janela
             exibir_win.withdraw()
             tela_analise_nomenclatura(
                 numero,              # passamos o número do projeto
@@ -664,8 +666,6 @@ def exibir_interface_tabela(
             tabela.column(c, width=0, stretch=False, minwidth=0)
         else:
             tabela.column(c, width=120)
-
-    # ocultamos a coluna "caminho" na exibição
     tabela["displaycolumns"] = (
         "Status","Nome do Arquivo","Extensão","Nº do Arquivo",
         "Fase","Tipo","Revisão","Modificação","Modificado por","Entrega"
@@ -1055,61 +1055,139 @@ def identificar_revisoes(lista_arquivos):
         aobs.extend([q[1] for q in arqs[:-1]])
     return arrv, aobs
 
-def criar_arquivo_controle(pasta_raiz_entregas: str):
-    json_controle_path = os.path.join(pasta_raiz_entregas, "historico_entregas.json")
-    if not os.path.exists(json_controle_path):
-        print(f"[ATENÇÃO] histórico não existe em: {json_controle_path}")
+def _calc_md5(path: Path, buf=8192) -> str | None:
+    if not path.exists():
+        return None
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while chunk := f.read(buf):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _carregar_status_anterior(pasta_entrega_atual: Path) -> dict[str, dict]:
+    """
+    Varre a entrega anterior (a subpasta imediatamente marcada -OBSOLETO).
+    Retorna dict nome→{"hash":…, "rev": "R03"} para comparação de versões.
+    """
+    ant = None
+    for sib in pasta_entrega_atual.parent.iterdir():
+        if sib.is_dir() and sib.name.endswith("-OBSOLETO"):
+            ant = sib
+    if not ant:
+        return {}
+    res = {}
+    for f in ant.iterdir():
+        if f.is_file():
+            nome = f.name
+            hash_ = _calc_md5(f)
+            rev   = nome.rsplit("-R", 1)[-1] if "-R" in nome else ""
+            res[nome] = {"hash": hash_, "rev": rev}
+    return res
+
+
+def _status_arquivo(arquivo: Path, info_ant: dict) -> str:
+    nome = arquivo.name
+    hash_atual = _calc_md5(arquivo)
+    rev_atual  = nome.rsplit("-R", 1)[-1] if "-R" in nome else ""
+
+    ant = info_ant.get(nome)
+    if ant is None or ant["hash"] is None:          # não existia mais
+        return "novo"
+
+    if hash_atual == ant["hash"]:
+        return "igual"
+    if rev_atual > ant["rev"]:
+        return "revisado"
+    return "mod_sem_rev"
+
+
+def criar_arquivo_controle(pasta_raiz_entregas: str) -> None:
+    """
+    Gera/atualiza GRD.xlsx no layout matricial.
+    Requer existir <pasta>/historico_entregas.json.
+    """
+    hist_json = Path(pasta_raiz_entregas) / "historico_entregas.json"
+    if not hist_json.exists():
+        logging.warning("historico_entregas.json inexistente em %s", pasta_raiz_entregas)
         return
-
-    with open(json_controle_path, "r", encoding="utf-8") as f:
-        historico = json.load(f)
-
+    historico = json.loads(hist_json.read_text(encoding="utf-8"))
     if not historico:
-        print("[ATENÇÃO] Nenhuma entrega registrada.")
+        logging.info("Histórico vazio, GRD não gerado.")
         return
 
-    wb = Workbook()
+    # 1. carrega template
+    wb = load_workbook(TEMPLATE_XLSX)
     ws = wb.active
-    ws.title = "GRD"
-    negrito = Font(bold=True)
 
-    ws.append(["OLIVEIRA ARAÚJO ENGENHARIA"])
-    ws.append(["Lista acumulativa de arquivos entregues"])
-    ws.append(["Gerado em:", datetime.now().strftime("%d/%m/%Y %H:%M")])
-    ws.append([])
+    # map cores
+    fill_verde   = PatternFill("solid", fgColor="C6EFCE")
+    fill_azul    = PatternFill("solid", fgColor="9BC2E6")
+    fill_laranja = PatternFill("solid", fgColor="FFC000")
 
-    for idx, ent in enumerate(historico, 1):
-        ws.append([f"Entrega {idx}",
-                   f"Tipo: {ent.get('tipo_entrega', '')}",
-                   f"Etapa: {ent.get('etapa', '')}",
-                   f"Data: {ent.get('data', '')}"])
-        ws.append(["Arquivo", "Revisão", "Status", "Caminho"])
-        for arq in ent.get("arquivos_entregues", []):
-            ws.append([
-                arq,
-                ent.get("revisao", ""),
-                ent.get("status", ""),
-                os.path.join(ent["pasta_entrega"], arq)
-            ])
-        ws.append([])
+    # 2. descobrir próxima coluna livre
+    col_inicio_ent = 3  # A=Grupo, B=Extens., C = 1ª entrega
+    col_atual = col_inicio_ent
+    while ws.cell(row=5, column=col_atual).value:   # linha 5 tem cabeçalhos de entrega no template
+        col_atual += 1
 
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
-        for cell in row:
-            if cell.row <= 3 or cell.column == 1:
-                cell.font = negrito
-    for col in ws.columns:
-        max_len = max(len(str(c.value)) if c.value else 0 for c in col)
-        ws.column_dimensions[get_column_letter(col[0].column)].width = max_len + 2
+    # 3. para cada entrega no histórico (na ordem)
+    for ent in historico:
+        tipo   = ent.get("tipo_entrega", "EX")
+        etapa  = ent.get("etapa", 1)
+        idx    = str(col_atual - col_inicio_ent + 1).zfill(2)   # NN
+        cabec  = f"Z.{tipo}.ENT {idx} - ENTREGUE"
+        ws.cell(row=5, column=col_atual, value=cabec)
 
-    os.makedirs(pasta_raiz_entregas, exist_ok=True)
-    caminho_excel = os.path.join(pasta_raiz_entregas, "GRD.xlsx")
-    wb.save(caminho_excel)
-    print(f"[INFO] GRD.xlsx atualizado em: {caminho_excel}")
+        # copia largura & validação da coluna anterior (se houver)
+        if col_atual > col_inicio_ent:
+            src_col = get_column_letter(col_atual - 1)
+            dst_col = get_column_letter(col_atual)
+            ws.column_dimensions[dst_col].width = ws.column_dimensions[src_col].width
+            for dv in ws.data_validations.dataValidation:
+                if dv.ranges and src_col in str(dv.ranges):
+                    new_dv = DataValidation(
+                        type=dv.type, formula1=dv.formula1, allow_blank=dv.allow_blank
+                    )
+                    new_dv.add(f"{dst_col}6:{dst_col}2000")   # mesmo range aproximado
+                    ws.add_data_validation(new_dv)
 
+        # coleta info da entrega anterior para definir status/cor
+        pasta_entrega = Path(ent["pasta_entrega"])
+        info_ant = _carregar_status_anterior(pasta_entrega)
 
-# -----------------------------------------------------
-# EXECUÇÃO
-# -----------------------------------------------------
+        # 3b. preencher linhas (a partir da linha 8 em diante, uma linha por arquivo)
+        linha = 8
+        for nome in ent["arquivos_entregues"]:
+            arq = pasta_entrega / nome
+            extens = arq.suffix.upper()  # ".PDF"
+            status = _status_arquivo(arq, info_ant)
+            cor = {"novo": fill_verde,
+                   "revisado": fill_azul,
+                   "mod_sem_rev": fill_laranja}.get(status)
+
+            # Grupo em branco (col-A)
+            ws.cell(row=linha, column=1, value="")
+
+            # Extens.
+            ws.cell(row=linha, column=2, value=extens)
+
+            # Celula da entrega
+            c = ws.cell(row=linha, column=col_atual, value=nome)
+            if cor:
+                c.fill = cor
+            linha += 1
+
+        col_atual += 1  # próxima entrega → próxima coluna
+
+    # 4. atualiza “Gerado em”
+    ws["B3"].value = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # 5. salva
+    out_path = Path(pasta_raiz_entregas) / "GRD.xlsx"
+    wb.save(out_path)
+    logging.info("GRD.xlsx atualizado: %s", out_path)
+
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
