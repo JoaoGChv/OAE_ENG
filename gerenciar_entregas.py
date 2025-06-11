@@ -26,6 +26,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Sequence, Tuple
+from utils.planilha_gerador import criar_ou_atualizar_planilha
 
 # -----------------------------------------------------
 # Dependência externa obrigatória ─ openpyxl
@@ -96,6 +97,8 @@ MESES: Tuple[str, ...] = (
 PASTA_ENTREGA_GLOBAL: str | None = None
 NOMENCLATURA_GLOBAL: Dict | None = None
 NUM_PROJETO_GLOBAL: str | None = None
+GRD_MASTER_NOME = "GRD_ENTREGAS.xlsx"   # arquivo único que receberá todas as colunas
+
 
 # -----------------------------------------------------
 # >>> INÍCIO INTEGRAÇÃO AP/PE 
@@ -1341,6 +1344,8 @@ def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
 def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_novos, arquivos_revisados, arquivos_alterados, obsoletos):
     num_entrega_atual = dados_anteriores.get("entregas_oficiais", 0) + 1
 
+    caminho_excel_master = os.path.join(diretorio, GRD_MASTER_NOME)
+
     if not primeira_entrega:
         if obsoletos or dados_anteriores.get("entregas_oficiais",0) >= 1:
             mover_obsoletos_e_grd_anterior(obsoletos, diretorio, num_entrega_atual)
@@ -1353,13 +1358,27 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
         if not union_:
             messagebox.showinfo("Info", "Nenhum arquivo a registrar na primeira entrega.")
             sys.exit(0)
-        caminho_excel = criar_arquivo_excel(diretorio, num_entrega_atual, union_)
+    if primeira_entrega:
+        lista_para_planilha = (
+            arquivos_novos + arquivos_revisados + arquivos_alterados
+        )
+        if not lista_para_planilha:
+            messagebox.showinfo("Info", "Nenhum arquivo a registrar na primeira entrega.")
+            sys.exit(0)
     else:
-        final_list = listar_arquivos_no_diretorio(diretorio)
-        if not final_list:
+        lista_para_planilha = listar_arquivos_no_diretorio(diretorio)
+        if not lista_para_planilha:
             messagebox.showinfo("Info", "Nenhum arquivo válido após remoção de obsoletos.")
             sys.exit(0)
-        caminho_excel = criar_arquivo_excel(diretorio, num_entrega_atual, final_list)
+
+    # gera / atualiza a planilha E principal
+    criar_ou_atualizar_planilha(
+        caminho_excel=caminho_excel_master,
+        tipo_entrega=TIPO_ENTREGA_GLOBAL or "AP",
+        num_entrega=num_entrega_atual,
+        diretorio_base=diretorio,
+        arquivos=lista_para_planilha,
+    )   
 
     dados_anteriores["ultima_execucao"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     dados_anteriores["entregas_oficiais"] = num_entrega_atual
