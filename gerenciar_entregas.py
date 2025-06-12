@@ -1439,7 +1439,7 @@ class TelaVerificacaoRevisao(tk.Tk):
 # Funções de Análise
 # -----------------------------------------------------
 def listar_arquivos_no_diretorio(diretorio):
-    ignorar = {"dados_execucao_anterior.json"}
+    ignorar = {"dados_execucao_anterior.json", GRD_MASTER_NOME}
     for f in os.listdir(diretorio):
         if f.startswith("GRD-ENTREGA."):
             ignorar.add(f)
