@@ -152,11 +152,12 @@ def criar_ou_atualizar_planilha(
     atual_info = {}
     for rev, nome, tam, _p, ts_str in arquivos:
         base, ext = _key(nome)
+        ts_val = os.path.getmtime(_p)
         atual_info[(base, ext)] = {
             "nome": nome,
             "rev": rev or _extrair_rev(nome),
             "tam": tam,
-            "ts":  ts_str,
+            "ts":  ts_val,
             "grupo": _classificar_extensao(ext),
             "ext": ext,
         }
@@ -244,7 +245,7 @@ def _carregar_snapshot(ws, linha_titulo: int, col_prev: int,
         snap[(base, ext)] = {
             "rev": dados.get("revisao", rev),
             "tam": dados.get("tamanho"),
-            "ts": None,
+            "ts": dados.get("timestamp"),
             "row": row,
         }
     return snap

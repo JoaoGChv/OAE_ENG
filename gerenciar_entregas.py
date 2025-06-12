@@ -1474,6 +1474,7 @@ def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
         ant = dados_anteriores.get(f"{key[0]}|{key[1]}", None)
         rev_ant = ant["revisao"] if ant else ""
         tam_ant = ant["tamanho"] if ant else None
+        ts_ant = ant.get("timestamp") if ant else None
 
         if not ant:
             if items:
@@ -1490,16 +1491,21 @@ def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
                     if nr > num_rev_ant:
                         revisados.append((rvx,arqx,tamx,camx,dmodx))
                     elif nr == num_rev_ant:
-                        if tamx != tam_ant:
+                        ts_now = os.path.getmtime(camx)
+                        if tamx != tam_ant or (ts_ant is not None and ts_now != ts_ant):
                             alterados.append((rvx,arqx,tamx,camx,dmodx))
             elif comp == 0:
                 for (rvx,arqx,tamx,camx,dmodx) in items:
-                    if rvx == rev_ant and tamx != tam_ant:
-                        alterados.append((rvx,arqx,tamx,camx,dmodx))
+                    if rvx == rev_ant:
+                        ts_now = os.path.getmtime(camx)
+                        if tamx != tam_ant or (ts_ant is not None and ts_now != ts_ant):
+                            alterados.append((rvx,arqx,tamx,camx,dmodx))
             else:
                 for (rvx,arqx,tamx,camx,dmodx) in items:
-                    if rvx == rev_ant and tamx != tam_ant:
-                        alterados.append((rvx,arqx,tamx,camx,dmodx))
+                    if rvx == rev_ant:
+                        ts_now = os.path.getmtime(camx)
+                        if tamx != tam_ant or (ts_ant is not None and ts_now != ts_ant):
+                            alterados.append((rvx,arqx,tamx,camx,dmodx))
 
     return (novos, revisados, alterados)
 
@@ -1557,9 +1563,12 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
         arr.sort(key=lambda x: comparar_revisoes(x[0], 'R99'))
         revf = arr[-1][0]
         tamf = arr[-1][2]
+        camf = arr[-1][3]
+        tsf = os.path.getmtime(camf)
         dados_anteriores[f"{key[0]}|{key[1]}"] = {
             "revisao": revf if revf else '',
-            "tamanho": tamf
+            "tamanho": tamf,
+            "timestamp": tsf,
         }
 
     salvar_dados(diretorio, dados_anteriores)
