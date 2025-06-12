@@ -458,6 +458,101 @@ def janela_erro_revisao(arquivos_alterados):
     janela.grab_set()
     janela.mainloop()
 
+# -----------------------------------------------------
+# UI: Seleção de disciplina dentro do projeto
+# -----------------------------------------------------
+def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None:
+    """
+    Abre <projeto>/3 Desenvolvimento, lista subpastas-disciplina.
+    Ao confirmar devolve o caminho completo da subpasta 1.ENTREGAS
+    da disciplina escolhida.
+    """
+    pasta_desenvol = os.path.join(caminho_proj, "3 Desenvolvimento")
+    if not os.path.isdir(pasta_desenvol):
+        messagebox.showerror(
+            "Erro",
+            f"A pasta '3 Desenvolvimento' não foi encontrada em:\n{caminho_proj}"
+        )
+        return None
+
+    root = tk.Tk()
+    root.title(f"Projeto {numero_proj} – Selecionar Disciplina")
+    root.geometry("700x500")
+    root.minsize(700, 400)
+
+    # ---------- coleta disciplinas ----------
+    disciplinas = []
+    for nome in sorted(os.listdir(pasta_desenvol)):
+        p = os.path.join(pasta_desenvol, nome)
+        if os.path.isdir(p):
+            dt = datetime.datetime.fromtimestamp(
+                os.path.getmtime(p)
+            ).strftime("%d/%m/%Y %H:%M")
+            disciplinas.append((nome, dt, p))          # (nome, data, caminho)
+
+    if not disciplinas:
+        messagebox.showerror("Erro", "Nenhuma disciplina encontrada.")
+        root.destroy()
+        return None
+
+    sel = {"path": None}
+
+    # ---------- callbacks ----------
+    def confirmar():
+        s = tree.selection()
+        if not s:
+            return
+        iid = s[0]
+        caminho_disc = tree.set(iid, "caminho")
+        # verifica 1.ENTREGAS
+        pasta_entregas = None
+        for folder in os.listdir(caminho_disc):
+            if folder.strip().lower().replace(" ", "") == "1.entregas":
+                pasta_entregas = os.path.join(caminho_disc, folder)
+                break
+        if not pasta_entregas or not os.path.isdir(pasta_entregas):
+            messagebox.showerror(
+                "Erro",
+                "A subpasta '1.ENTREGAS' não foi encontrada dentro da disciplina."
+            )
+            return
+        sel["path"] = pasta_entregas
+        root.destroy()
+
+    def filtrar(*_):
+        termo = entrada.get().lower()
+        tree.delete(*tree.get_children())
+        for nome, dt, caminho in disciplinas:
+            if termo in nome.lower():
+                tree.insert(
+                    "", tk.END,
+                    values=(nome, dt, caminho)
+                )
+
+    # ---------- UI ----------
+    tk.Label(root, text="Filtrar disciplina:").pack(anchor="w", padx=10, pady=5)
+    entrada = tk.Entry(root)
+    entrada.pack(fill=tk.X, padx=10)
+    entrada.bind("<KeyRelease>", filtrar)
+    entrada.bind("<Return>", lambda e: confirmar())
+
+    cols = ("nome", "data", "caminho")
+    tree = ttk.Treeview(root, columns=cols, show="headings", height=15)
+    tree.heading("nome", text="Disciplina")
+    tree.heading("data", text="Modificado em")
+    tree.heading("caminho", text="caminho")
+    tree.column("nome", width=250, anchor="w")
+    tree.column("data", width=130, anchor="w")
+    tree.column("caminho", width=0, stretch=False, minwidth=0)   # oculta
+
+    tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+    for nome, dt, caminho in disciplinas:
+        tree.insert("", tk.END, values=(nome, dt, caminho))
+
+    tk.Button(root, text="Confirmar", command=confirmar).pack(pady=5)
+    root.mainloop()
+    return sel["path"]
 
 # -----------------------------------------------------
 # Movimento de obsoletos
@@ -604,12 +699,48 @@ def selecionar_pasta_entrega(diretorio_inicial: str):
 # -----------------------------------------------------
 # Janela 1: TelaAdicaoArquivos
 # -----------------------------------------------------
-class TelaAdicaoArquivos(tk.Tk):
+class TelaAdicaoArquivos(tk.Tk):    
     """
     Janela inicial: o usuário seleciona os arquivos para entrega.
     """
-    def __init__(self, lista_inicial=None, *args, **kwargs):
+    def __init__(self, lista_inicial=None, pasta_entrega: str | None = None, numero_projeto: str | None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        root_frame = tk.Frame(self)          # capa principal
+        root_frame.pack(fill=tk.BOTH, expand=True)
+
+        bar_l = tk.Frame(root_frame, bg="#2c3e50", width=200)
+        bar_l.pack(side=tk.LEFT, fill=tk.Y)
+        bar_l.pack_propagate(False)
+
+        tk.Label(bar_l, text="OAE - Engenharia",
+                font=("Helvetica", 14, "bold"),
+                bg="#2c3e50", fg="white").pack(pady=10)
+
+        tk.Label(bar_l, text="PROJETOS",
+                font=("Helvetica", 10, "bold"),
+                bg="#34495e", fg="white", anchor="w", padx=10
+                ).pack(fill=tk.X, pady=(0, 5))
+
+        lst_proj = tk.Listbox(bar_l, height=5,
+                            bg="#ecf0f1", font=("Helvetica", 9))
+        lst_proj.pack(fill=tk.X, padx=10, pady=5)
+        if numero_projeto:
+            lst_proj.insert(tk.END, f"Projeto {numero_projeto}")
+
+        tk.Label(bar_l, text="MEMBROS",
+                font=("Helvetica", 10, "bold"),
+                bg="#34495e", fg="white", anchor="w", padx=10
+                ).pack(fill=tk.X, pady=5)
+
+        # Painel onde ficará TODO o conteúdo antigo
+        content = tk.Frame(root_frame, bg="#f5f5f5")
+        content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        lbl_title = tk.Label(content, text="Adicionar Arquivos para Entrega",
+                        font=("Helvetica", 15, "bold"), bg="#f5f5f5",
+                        anchor="w")
+        lbl_title.pack(fill=tk.X, pady=(10, 5), padx=10)
+
         self.resizable(True, True)
         self.title("Adicionar Arquivos para Entrega")
 
@@ -621,7 +752,7 @@ class TelaAdicaoArquivos(tk.Tk):
 
         self.view_mode = "grouped"
 
-        container = tk.Frame(self)
+        container = tk.Frame(content)
         container.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         lbl = tk.Label(container, text="Selecione arquivos para entrega. A listagem aparecerá conforme forem adicionados.")
@@ -639,7 +770,7 @@ class TelaAdicaoArquivos(tk.Tk):
         tk.Button(btn_frame, text="Voltar / Cancelar", command=self.voltar_cancelar).pack(side=tk.RIGHT, padx=5)
         tk.Button(btn_frame, text="Analisar", command=self.proxima_janela_nomenclatura).pack(side=tk.RIGHT, padx=5)
 
-        self.canvas_global = tk.Canvas(container)
+        self.canvas_global = tk.Canvas(content)
         self.canvas_global.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self.scrollbar_global = tk.Scrollbar(container, orient="vertical", command=self.canvas_global.yview, width=20)
@@ -670,6 +801,37 @@ class TelaAdicaoArquivos(tk.Tk):
 
         if lista_inicial:
             self.recarregar_lista(lista_inicial)
+
+        self.render_view()
+
+        if pasta_entrega:
+            self._abrir_filedialog_inicial(pasta_entrega)
+
+    # --------------------------------------------------
+    # NOVO – abre o diálogo já na 1.ENTREGAS
+    # --------------------------------------------------
+    def _abrir_filedialog_inicial(self, pasta_entrega):
+        inicial = pasta_entrega if os.path.isdir(pasta_entrega) else os.path.expanduser("~")
+        paths = filedialog.askopenfilenames(
+            title="Selecione arquivos para entrega",
+            initialdir=inicial
+        )
+        if not paths:
+            return
+        dir_of_first = os.path.dirname(paths[0])
+        salvar_ultimo_diretorio(dir_of_first)
+
+        for p in paths:
+            if not os.path.isfile(p):
+                continue
+            base, rev, ext = identificar_nome_com_revisao(os.path.basename(p))
+            data_ts = os.path.getmtime(p)
+            data_mod = datetime.datetime.fromtimestamp(data_ts).strftime("%d/%m/%Y %H:%M")
+            no_arq = extrair_numero_arquivo(base)
+            grupo = self.classificar_extensao(ext)
+            self.arquivos_por_grupo.setdefault(grupo, [])
+            if p not in [x[0] for x in self.arquivos_por_grupo[grupo]]:
+                self.arquivos_por_grupo[grupo].append((p, no_arq, base, rev, data_mod, ext))
 
         self.render_view()
 
@@ -1409,19 +1571,23 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
 # Função Principal
 # -----------------------------------------------------
 def main():
-    numero_projeto, caminho_projeto = janela_selecao_projeto()
-    if not numero_projeto or not caminho_projeto:
+    num_proj, caminho_proj = janela_selecao_projeto()
+    if not num_proj or not caminho_proj:
         return
 
-    global NOMENCLATURA_GLOBAL, PASTA_ENTREGA_GLOBAL, NUM_PROJETO_GLOBAL
-    NOMENCLATURA_GLOBAL = carregar_nomenclatura_json(numero_projeto)
-    NUM_PROJETO_GLOBAL = numero_projeto
-
-    pasta_entrega = selecionar_pasta_entrega(caminho_projeto)
+    pasta_entrega = janela_selecao_disciplina(num_proj, caminho_proj)
     if not pasta_entrega:
-        return
-    PASTA_ENTREGA_GLOBAL = pasta_entrega
-    app = TelaAdicaoArquivos()
+        return   # usuário cancelou ou erro
+
+    # variáveis globais
+    global NOMENCLATURA_GLOBAL, PASTA_ENTREGA_GLOBAL, NUM_PROJETO_GLOBAL
+    NOMENCLATURA_GLOBAL   = carregar_nomenclatura_json(num_proj)
+    PASTA_ENTREGA_GLOBAL  = pasta_entrega
+    NUM_PROJETO_GLOBAL    = num_proj
+
+    # abre a 1ª janela já indicando a pasta
+    app = TelaAdicaoArquivos(pasta_entrega=pasta_entrega,
+                         numero_projeto=num_proj)
     app.mainloop()
 
 

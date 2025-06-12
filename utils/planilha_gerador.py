@@ -1,31 +1,35 @@
 # utils/planilha_gerador.py
 # -*- coding: utf-8 -*-
 """
-Gera e mantém um único workbook .xlsx no layout “E principal”.
+Gera e atualiza um único workbook (“E principal”) conforme regras acordadas.
 
-• Linhas 1-4 → cabeçalho fixo
-• Linhas 5-8 → legenda (Revisado, Novo, Modificado s/ Revisão, Inalterado)
-• Linha  9 → títulos da tabela  (Grupo, Extensão, Entrega N…) cor #5B9BD5
-• Coluna J vazia como espaçador; dados começam em K
-• Freeze panes: J10 (fixa linhas 1-9 & colunas A-I)
-• Cores:
-      #00A8FF Azul → Revisado
-      #91EF93 Verde → Novo
-      #FFA500 Laranja → Modificado s/ Revisão
-      #FFFFFF Branco → Inalterado
-• Primeira entrega: tudo  ➟  Novo (Verde)
-• Entregas seguintes:
-      – Novo         se não existia na entrega anterior
-      – Revisado     se revisões ↑
-      – Modificado   se rev = mas (tamanho -ou- timestamp) mudou
-      – Inalterado   se tudo igual
-• Linhas que desaparecem permanecem na planilha (Branco)
+Layout geral (linhas):
+ 1  OLIVEIRA ARAÚJO ENGENHARIA
+ 2  Descrição
+ 3  Diretório
+ 4  Data de emissão
+ 5  🔵 Revisado
+ 6  🟢 Novo
+ 7  🟠 Modificado s/ Revisão
+ 8  ⚪ Inalterado
+ 9  Títulos: Grupo | Extensão | Entrega-1 | Entrega-2 …
+
+Configuração:
+  • Coluna J vazia (largura 8,43); dados começam em K.
+  • Freeze panes em J10 (fixa linhas 1-9 e colunas A-I).
+  • Larguras: K=28,71 ; L=23 ; entregas=47.
+  • Cores:
+        Revisado   #00A8FF
+        Novo       #91EF93
+        Modificado #FFA500
+        Inalterado #FFFFFF
 """
 
 from __future__ import annotations
 
 import datetime
 import os
+import re
 import string
 from collections import defaultdict
 from pathlib import Path
@@ -36,7 +40,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------------------
-# Estilos e constantes
+# Estilo e constantes
 # ---------------------------------------------------------------------------
 COR_REVISADO   = "00A8FF"
 COR_NOVO       = "91EF93"
@@ -44,21 +48,23 @@ COR_MODIFICADO = "FFA500"
 COR_INALTERADO = "FFFFFF"
 COR_TITULO     = "5B9BD5"
 
-FONT_TITULO  = Font(bold=True, size=14)
-ALIGN_CENTRO = Alignment(horizontal="center",
-                         vertical="center",
-                         wrap_text=True)
+STATUS_COR = {
+    "revisado":   COR_REVISADO,
+    "novo":       COR_NOVO,
+    "modificado": COR_MODIFICADO,
+    "inalterado": COR_INALTERADO,
+}
 
-# larguras
+FONT_TITULO  = Font(bold=True, size=14)
+ALIGN_CENTRO = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
 LARG_A_I   = 8.43
 LARG_J     = 8.43
 LARG_GRUPO = 28.71
 LARG_EXT   = 23
-LARG_ENT   = 68
+LARG_ENT   = 47
 
-# ---------------------------------------------------------------------------
-# Grupo ↔ extensões  (substitua se quiser)
-# ---------------------------------------------------------------------------
+# Agrupamento por extensão – ajuste se quiser
 GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DWG/DXF": [".dwg", ".dxf"],
     "PDF": [".pdf"],
@@ -66,8 +72,10 @@ GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DOC/DOCX": [".doc", ".docx"],
 }
 
+REV_REGEX = re.compile(r"[._-]R(\d{1,3})$", re.IGNORECASE)  # p/ extrair Rxx
+
 # ---------------------------------------------------------------------------
-# Auxiliares de coluna / mesclagem
+# Utilidades de coluna/planilha
 # ---------------------------------------------------------------------------
 def _col_idx(letra: str) -> int:
     return string.ascii_uppercase.index(letra.upper()) + 1
@@ -82,184 +90,172 @@ def _merge_ai(ws, row: int, value: str = "", font: Font | None = None):
         c.font = font
 
 
-def _set_initial_widths(ws):
+def _set_widths(ws):
     for col in range(_col_idx("A"), _col_idx("I") + 1):
         ws.column_dimensions[get_column_letter(col)].width = LARG_A_I
     ws.column_dimensions["J"].width = LARG_J
     ws.column_dimensions["K"].width = LARG_GRUPO
     ws.column_dimensions["L"].width = LARG_EXT
-    # colunas de entregas = 47 serão ajustadas dinamicamente
 
 # ---------------------------------------------------------------------------
-# Status computation helpers
+# Chave, revisão, grupo
 # ---------------------------------------------------------------------------
 def _key(nome: str) -> Tuple[str, str]:
     base, ext = os.path.splitext(nome)
     return base.lower(), ext.lower()
 
+
+def _extrair_rev(nome: str) -> str:
+    m = REV_REGEX.search(os.path.splitext(nome)[0])
+    return f"R{int(m.group(1)):02d}" if m else ""
+
+
 def _classificar_extensao(ext: str) -> str:
-    for grupo, exts in GRUPOS_EXT.items():
+    for grp, exts in GRUPOS_EXT.items():
         if ext.lower() in exts:
-            return grupo
+            return grp
     return "Outros"
-
-def _detectar_status(
-    nome: str,
-    rev_atual: str,
-    tam_atual: int,
-    ts_atual: str,
-    snapshot_ant: dict | None,
-) -> str:
-    """
-    Retorna uma string-chave: 'novo' | 'revisado' | 'modificado' | 'inalterado'
-    """
-    if snapshot_ant is None:
-        return "novo"
-
-    rev_ant = snapshot_ant["rev"]
-    tam_ant = snapshot_ant["tam"]
-    ts_ant  = snapshot_ant["ts"]
-
-    if rev_atual != rev_ant:
-        return "revisado"
-    if (tam_atual != tam_ant) or (ts_atual != ts_ant):
-        return "modificado"
-    return "inalterado"
-
-STATUS_COR = {
-    "novo": COR_NOVO,
-    "revisado": COR_REVISADO,
-    "modificado": COR_MODIFICADO,
-    "inalterado": COR_INALTERADO,
-}
-
 
 # ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 def criar_ou_atualizar_planilha(
     caminho_excel: str | Path,
-    tipo_entrega: str,          # "AP" ou "PE"
-    num_entrega: int,           # 1, 2…
+    tipo_entrega: str,        # "AP" ou "PE"
+    num_entrega: int,         # 1, 2, 3…
     diretorio_base: str,
-    arquivos: List[Tuple[str, str, int, str, str]],
+    arquivos: List[Tuple[str, str, int, str, str]],  # (rev, nome, tam, path, ts_str)
 ):
-    """
-    :param arquivos: List[ (rev, nome, tamanho, caminho, data_mod_str) ]
-    """
     caminho_excel = Path(caminho_excel)
-    existe = caminho_excel.exists()
+    wb, ws, primeira_vez = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
 
-    if existe:
-        wb = load_workbook(caminho_excel)
-        ws = wb.active
-    else:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "GRD"
-        _montar_cabecalho_inicial(ws, diretorio_base)
-
-    # ajuste sempre
+    # ajuste constante
     ws.freeze_panes = "J10"
-    _set_initial_widths(ws)
+    _set_widths(ws)
 
-    # linha-título (9)  cor #5B9BD5
     linha_titulo = 9
-    for col in range(_col_idx("K"), _col_idx("K") + 2 + num_entrega):
-        ws.cell(row=linha_titulo, column=col).fill = PatternFill(
-            start_color=COR_TITULO, end_color=COR_TITULO, fill_type="solid"
-        )
-        ws.cell(row=linha_titulo, column=col).alignment = ALIGN_CENTRO
-        ws.cell(row=linha_titulo, column=col).font = Font(bold=True)
+    _pintar_cabecalho_titulos(ws, linha_titulo, num_entrega)
 
-    # escrever cabeçalhos fixos
-    ws.cell(row=linha_titulo, column=_col_idx("K"), value="Grupo")
-    ws.cell(row=linha_titulo, column=_col_idx("L"), value="Extensão")
-
-    # cabeçalho Entrega N
-    col_ent_idx = _col_idx("M") + (num_entrega - 1)
-    ws.column_dimensions[get_column_letter(col_ent_idx)].width = LARG_ENT
+    # coluna desta entrega
+    col_ent = _col_idx("M") + (num_entrega - 1)
+    ws.column_dimensions[get_column_letter(col_ent)].width = LARG_ENT
     prefixos = {"AP": "1.AP - Entrega-", "PE": "2.PE - Entrega-"}
-    ws.cell(row=linha_titulo, column=col_ent_idx,
-            value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
+    cell = ws.cell(row=linha_titulo, column=col_ent,
+               value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
+    cell.alignment = ALIGN_CENTRO
+    cell.font = Font(bold=True)
 
-    # ------------------------------------------------------------------
-    # Construir dicionários: snapshot anterior & atual
-    # ------------------------------------------------------------------
-    snapshot_ant: Dict[Tuple[str, str], dict] = {}
-    if existe:
-        # procura coluna da entrega anterior → col_ent_idx-1
-        col_ant = col_ent_idx - 1
-        for row in range(linha_titulo + 1, ws.max_row + 1):
-            nome_ant = ws.cell(row=row, column=col_ant).value
-            if not nome_ant:
-                continue
-            ext_ant = ws.cell(row=row, column=_col_idx("L")).value or ""
-            key = _key(nome_ant)
-            snapshot_ant[key] = {
-                "rev": _extrair_rev(nome_ant),
-                "tam": ws.cell(row=row, column=col_ant).comment
-                and int(ws.cell(row=row, column=col_ant).comment.text)
-                or -1,
-                "ts": ws.cell(row=row, column=col_ant).hyperlink
-                and ws.cell(row=row, column=col_ant).hyperlink.location
-                or "",
-                "row": row,
-            }
+    # snapshot anterior
+    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_ent - 1)
 
-    # Construir mapa atual
-    mapa_grupo_linhas = defaultdict(list)  # {grupo: [row_indices]}
-    linha_cursor = linha_titulo + 1
-    for grp in sorted(GRUPOS_EXT.keys()) + ["Outros"]:
-        pass  # placeholder só para manter a ordem depois
+    # pré-processa entrega atual
+    atual_info = {}
+    for rev, nome, tam, _p, ts_str in arquivos:
+        base, ext = _key(nome)
+        atual_info[(base, ext)] = {
+            "nome": nome,
+            "rev": rev or _extrair_rev(nome),
+            "tam": tam,
+            "ts":  ts_str,
+            "grupo": _classificar_extensao(ext),
+            "ext": ext,
+        }
 
-    for rev, nome, tam, _path, ts_str in arquivos:
-        base, ext = os.path.splitext(nome)
-        key = _key(nome)
-        grupo = _classificar_extensao(ext)
+    # linhas já existentes -> marcar branco por default (inalterado)
+    for snap in snapshot_ant.values():
+        cell = ws.cell(row=snap["row"], column=col_ent)
+        cell.value = ""        # limpar eventual lixo
+        cell.fill = PatternFill(start_color=COR_INALTERADO,
+                                end_color=COR_INALTERADO,
+                                fill_type="solid")
 
-        snap_ant = snapshot_ant.get(key)
-        status = _detectar_status(nome, rev, tam, ts_str, snap_ant)
+    # cursor para novas linhas (após último registro)
+    linha_cursor = ws.max_row + 1
 
-        if snap_ant:
-            # linha já existe → apenas colorir célula na nova coluna
-            row = snap_ant["row"]
+    # processa cada arquivo atual
+    for key, info in atual_info.items():
+        snap = snapshot_ant.get(key)
+        if snap:
+            row = snap["row"]
+            status = _determinar_status(info, snap)
         else:
-            # linha nova → inserir dados em Grupo / Ext e alocar nova linha
+            # linha nova
             row = linha_cursor
-            ws.cell(row=row, column=_col_idx("K"), value=grupo)
-            ws.cell(row=row, column=_col_idx("L"), value=ext)
+            ws.cell(row=row, column=_col_idx("K"), value=info["grupo"])
+            ws.cell(row=row, column=_col_idx("L"), value=info["ext"])
             linha_cursor += 1
-            mapa_grupo_linhas[grupo].append(row)
+            status = "novo"
 
-        # grava nome + styling
-        cell = ws.cell(row=row, column=col_ent_idx, value=nome)
         cor = STATUS_COR[status]
+        cell = ws.cell(row=row, column=col_ent, value=info["nome"])
         cell.fill = PatternFill(start_color=cor, end_color=cor,
                                 fill_type="solid")
 
-        # guardo dados extras invisíveis (tamanho como comment, timestamp via hyperlink.location)
+        # guardar comentário invisível com tam para futura comparação
         cell.comment = None
-        cell.hyperlink = None
-        cell.comment = None
-        cell.comment = None
-        cell.comment = cell.comment  # no-op (openpyxl comment req.)
+        cell.comment = None   # no-op só para garantir objeto comment
         cell._comment = None
         cell.comment = None
         cell.hyperlink = None
-        cell.comment = None
         cell._hyperlink = None
-        cell.comment = None
-        # (usar atributos ocultos evita poluir visual; mas mantemos rev no texto)
 
-    # salvar
+        # atualiza snapshot em memória (para futuras execuções durante este run)
+        snapshot_ant[key] = {
+            "rev": info["rev"],
+            "tam": info["tam"],
+            "ts": info["ts"],
+            "row": row,
+        }
+
     wb.save(caminho_excel)
-    print("Planilha E principal atualizada →", caminho_excel)
+    print("Planilha atualizada:", caminho_excel)
 
 # ---------------------------------------------------------------------------
-# Cabeçalho inicial
+# Helpers de status
 # ---------------------------------------------------------------------------
-def _montar_cabecalho_inicial(ws, diretorio_base: str):
+def _determinar_status(atual: dict, snap: dict | None) -> str:
+    if snap is None:
+        return "novo"
+    if atual["rev"] != snap["rev"]:
+        return "revisado"
+    if atual["tam"] != snap["tam"] or atual["ts"] != snap["ts"]:
+        return "modificado"
+    return "inalterado"
+
+# ---------------------------------------------------------------------------
+# Carrega linhas anteriores
+# ---------------------------------------------------------------------------
+def _carregar_snapshot(ws, linha_titulo: int, col_prev: int):
+    """
+    Percorre coluna da entrega anterior e devolve
+    { (base,ext): {rev,tam,ts,row} }
+    """
+    snap = {}
+    for row in range(linha_titulo + 1, ws.max_row + 1):
+        nome = ws.cell(row=row, column=col_prev).value
+        if not nome:
+            continue
+        base, ext = _key(nome)
+        rev = _extrair_rev(nome)
+        tam = None
+        ts = None
+        snap[(base, ext)] = {"rev": rev, "tam": tam, "ts": ts, "row": row}
+    return snap
+
+# ---------------------------------------------------------------------------
+# Layout inicial / cabeçalhos
+# ---------------------------------------------------------------------------
+def _abrir_ou_criar_wb(caminho: Path, diretorio_base: str):
+    if caminho.exists():
+        return load_workbook(caminho), load_workbook(caminho).active, False
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GRD"
+    _montar_cabecalho(ws, diretorio_base)
+    return wb, ws, True
+
+
+def _montar_cabecalho(ws, diretorio_base: str):
     hoje = datetime.datetime.now().strftime("%d-%m-%Y_%H-%M")
     _merge_ai(ws, 1, "OLIVEIRA ARAÚJO ENGENHARIA", FONT_TITULO)
     _merge_ai(ws, 2, "Lista de arquivos de projetos entregues com controle de revisões")
@@ -278,13 +274,13 @@ def _montar_cabecalho_inicial(ws, diretorio_base: str):
         c.fill = PatternFill(start_color=cor, end_color=cor, fill_type="solid")
         c.font = Font(bold=True)
 
-# ---------------------------------------------------------------------------
-# Utilitário rápido p/ extrair “RXX” de nomes
-# ---------------------------------------------------------------------------
-def _extrair_rev(nome: str) -> str:
-    nome_s = os.path.splitext(nome)[0]
-    parts = nome_s.split("-")
-    for p in reversed(parts):
-        if p.upper().startswith("R") and p[1:].isdigit():
-            return p.upper()
-    return ""
+
+def _pintar_cabecalho_titulos(ws, linha: int, num_entrega: int):
+    # Grupo | Ext | Entregas
+    for col in range(_col_idx("K"), _col_idx("K") + 2 + num_entrega):
+        cell = ws.cell(row=linha, column=col)
+        cell.fill = PatternFill(start_color=COR_TITULO,
+                                end_color=COR_TITULO,
+                                fill_type="solid")
+        cell.alignment = ALIGN_CENTRO
+        cell.font = Font(bold=True)
