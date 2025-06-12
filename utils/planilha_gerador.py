@@ -31,7 +31,6 @@ import datetime
 import os
 import re
 import string
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -125,6 +124,7 @@ def criar_ou_atualizar_planilha(
     num_entrega: int,         # 1, 2, 3…
     diretorio_base: str,
     arquivos: List[Tuple[str, str, int, str, str]],  # (rev, nome, tam, path, ts_str)
+    estado_anterior: Dict[str, Dict[str, object]] | None = None,
 ):
     caminho_excel = Path(caminho_excel)
     wb, ws, primeira_vez = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
@@ -146,7 +146,7 @@ def criar_ou_atualizar_planilha(
     cell.font = Font(bold=True)
 
     # snapshot anterior
-    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_ent - 1)
+    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_ent - 1, estado_anterior)
 
     # pré-processa entrega atual
     atual_info = {}
@@ -216,16 +216,19 @@ def criar_ou_atualizar_planilha(
 def _determinar_status(atual: dict, snap: dict | None) -> str:
     if snap is None:
         return "novo"
-    if atual["rev"] != snap["rev"]:
+    if atual["rev"] != snap.get("rev", ""):
         return "revisado"
-    if atual["tam"] != snap["tam"] or atual["ts"] != snap["ts"]:
+    if snap.get("tam") is not None and atual["tam"] != snap["tam"]:
+        return "modificado"
+    if snap.get("ts") is not None and atual["ts"] != snap["ts"]:
         return "modificado"
     return "inalterado"
 
 # ---------------------------------------------------------------------------
 # Carrega linhas anteriores
 # ---------------------------------------------------------------------------
-def _carregar_snapshot(ws, linha_titulo: int, col_prev: int):
+def _carregar_snapshot(ws, linha_titulo: int, col_prev: int,
+                       estado_anterior: Dict[str, Dict[str, object]] | None = None):
     """
     Percorre coluna da entrega anterior e devolve
     { (base,ext): {rev,tam,ts,row} }
@@ -237,9 +240,13 @@ def _carregar_snapshot(ws, linha_titulo: int, col_prev: int):
             continue
         base, ext = _key(nome)
         rev = _extrair_rev(nome)
-        tam = None
-        ts = None
-        snap[(base, ext)] = {"rev": rev, "tam": tam, "ts": ts, "row": row}
+        dados = estado_anterior.get(f"{base}|{ext}", {}) if estado_anterior else {}
+        snap[(base, ext)] = {
+            "rev": dados.get("revisao", rev),
+            "tam": dados.get("tamanho"),
+            "ts": None,
+            "row": row,
+        }
     return snap
 
 # ---------------------------------------------------------------------------
@@ -247,7 +254,8 @@ def _carregar_snapshot(ws, linha_titulo: int, col_prev: int):
 # ---------------------------------------------------------------------------
 def _abrir_ou_criar_wb(caminho: Path, diretorio_base: str):
     if caminho.exists():
-        return load_workbook(caminho), load_workbook(caminho).active, False
+        wb = load_workbook(caminho)
+        return wb, wb.active, False
     wb = Workbook()
     ws = wb.active
     ws.title = "GRD"

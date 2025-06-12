@@ -1540,7 +1540,8 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
         num_entrega=num_entrega_atual,
         diretorio_base=diretorio,
         arquivos=lista_para_planilha,
-    )   
+        estado_anterior=dados_anteriores,
+    )
 
     dados_anteriores["ultima_execucao"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     dados_anteriores["entregas_oficiais"] = num_entrega_atual
