@@ -1,28 +1,17 @@
 # utils/planilha_gerador.py
 # -*- coding: utf-8 -*-
 """
-Gera e atualiza um único workbook (“E principal”) conforme regras acordadas.
+Gera / atualiza a planilha-mestre (“E principal”) com o histórico
+de entregas, segundo regras combinadas com a OAE.
 
-Layout geral (linhas):
- 1  OLIVEIRA ARAÚJO ENGENHARIA
- 2  Descrição
- 3  Diretório
- 4  Data de emissão
- 5  🔵 Revisado
- 6  🟢 Novo
- 7  🟠 Modificado s/ Revisão
- 8  ⚪ Inalterado
- 9  Títulos: Grupo | Extensão | Entrega-1 | Entrega-2 …
-
-Configuração:
-  • Coluna J vazia (largura 8,43); dados começam em K.
-  • Freeze panes em J10 (fixa linhas 1-9 e colunas A-I).
-  • Larguras: K=28,71 ; L=23 ; entregas=47.
-  • Cores:
-        Revisado   #00A8FF
-        Novo       #91EF93
-        Modificado #FFA500
-        Inalterado #FFFFFF
+Alterações de 2025-06-13
+------------------------
+• _key(): agora remove o sufixo “-Rxx/Rx” do nome antes de comparar;
+  com isso um mesmo desenho (R01, R02, …) ocupa UMA única linha.
+• _carregar_snapshot(): mantém compatibilidade mas passa a gravar /
+  ler timestamp (quando vier de estado_anterior).
+• _determinar_status(): usa rev, tamanho **ou** timestamp para decidir
+  se é “revisado”, “modificado” ou “inalterado”.
 """
 
 from __future__ import annotations
@@ -63,7 +52,6 @@ LARG_GRUPO = 28.71
 LARG_EXT   = 23
 LARG_ENT   = 47
 
-# Agrupamento por extensão – ajuste se quiser
 GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DWG/DXF": [".dwg", ".dxf"],
     "PDF": [".pdf"],
@@ -71,10 +59,11 @@ GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DOC/DOCX": [".doc", ".docx"],
 }
 
-REV_REGEX = re.compile(r"[._-]R(\d{1,3})$", re.IGNORECASE)  # p/ extrair Rxx
+# detecta sufixo “-R1…R999” em final de nome (antes da extensão)
+REV_REGEX = re.compile(r"([-._])R(\d{1,3})$", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
-# Utilidades de coluna/planilha
+# Utilidades de coluna / planilha
 # ---------------------------------------------------------------------------
 def _col_idx(letra: str) -> int:
     return string.ascii_uppercase.index(letra.upper()) + 1
@@ -100,13 +89,27 @@ def _set_widths(ws):
 # Chave, revisão, grupo
 # ---------------------------------------------------------------------------
 def _key(nome: str) -> Tuple[str, str]:
+    """
+    Devolve (base_s/rev, extensão) já em lower-case.
+
+    Ex.:
+        C-PBL...-R01.pdf  ->  (c-pbl..., .pdf)
+        C-PBL...pdf       ->  (c-pbl..., .pdf)
+    """
     base, ext = os.path.splitext(nome)
+    base = base.strip()
+
+    # remove sufixo "-Rxx" se existir
+    m = REV_REGEX.search(base)
+    if m:
+        base = base[: m.start()]    # descarta separador + Rxx
+
     return base.lower(), ext.lower()
 
 
 def _extrair_rev(nome: str) -> str:
     m = REV_REGEX.search(os.path.splitext(nome)[0])
-    return f"R{int(m.group(1)):02d}" if m else ""
+    return f"R{int(m.group(2)):02d}" if m else ""
 
 
 def _classificar_extensao(ext: str) -> str:
@@ -127,9 +130,8 @@ def criar_ou_atualizar_planilha(
     estado_anterior: Dict[str, Dict[str, object]] | None = None,
 ):
     caminho_excel = Path(caminho_excel)
-    wb, ws, primeira_vez = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
+    wb, ws, _ = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
 
-    # ajuste constante
     ws.freeze_panes = "J10"
     _set_widths(ws)
 
@@ -140,19 +142,19 @@ def criar_ou_atualizar_planilha(
     col_ent = _col_idx("M") + (num_entrega - 1)
     ws.column_dimensions[get_column_letter(col_ent)].width = LARG_ENT
     prefixos = {"AP": "1.AP - Entrega-", "PE": "2.PE - Entrega-"}
-    cell = ws.cell(row=linha_titulo, column=col_ent,
-               value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
-    cell.alignment = ALIGN_CENTRO
-    cell.font = Font(bold=True)
+    cell_t = ws.cell(row=linha_titulo, column=col_ent,
+                     value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
+    cell_t.alignment = ALIGN_CENTRO
+    cell_t.font = Font(bold=True)
 
     # snapshot anterior
     snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_ent - 1, estado_anterior)
 
-    # pré-processa entrega atual
+    # --- pré-processa lista da entrega corrente ---
     atual_info = {}
-    for rev, nome, tam, _p, ts_str in arquivos:
+    for rev, nome, tam, p, _tsstr in arquivos:
         base, ext = _key(nome)
-        ts_val = os.path.getmtime(_p)
+        ts_val = os.path.getmtime(p)
         atual_info[(base, ext)] = {
             "nome": nome,
             "rev": rev or _extrair_rev(nome),
@@ -162,49 +164,38 @@ def criar_ou_atualizar_planilha(
             "ext": ext,
         }
 
-    # linhas já existentes -> marcar branco por default (inalterado)
+    # marca todas as linhas existentes como “inalterado” por default
     for snap in snapshot_ant.values():
-        cell = ws.cell(row=snap["row"], column=col_ent)
-        cell.value = ""        # limpar eventual lixo
-        cell.fill = PatternFill(start_color=COR_INALTERADO,
-                                end_color=COR_INALTERADO,
-                                fill_type="solid")
+        ws.cell(row=snap["row"], column=col_ent).fill = PatternFill(
+            start_color=COR_INALTERADO, end_color=COR_INALTERADO, fill_type="solid"
+        )
 
-    # cursor para novas linhas (após último registro)
+    # cursor para novas linhas
     linha_cursor = ws.max_row + 1
 
-    # processa cada arquivo atual
-    for key, info in atual_info.items():
-        snap = snapshot_ant.get(key)
+    # --- percorre arquivos atuais ---
+    for key_, info in atual_info.items():
+        snap = snapshot_ant.get(key_)
         if snap:
             row = snap["row"]
             status = _determinar_status(info, snap)
         else:
-            # linha nova
+            # nova linha
             row = linha_cursor
+            linha_cursor += 1
             ws.cell(row=row, column=_col_idx("K"), value=info["grupo"])
             ws.cell(row=row, column=_col_idx("L"), value=info["ext"])
-            linha_cursor += 1
             status = "novo"
 
         cor = STATUS_COR[status]
-        cell = ws.cell(row=row, column=col_ent, value=info["nome"])
-        cell.fill = PatternFill(start_color=cor, end_color=cor,
-                                fill_type="solid")
+        c = ws.cell(row=row, column=col_ent, value=info["nome"])
+        c.fill = PatternFill(start_color=cor, end_color=cor, fill_type="solid")
 
-        # guardar comentário invisível com tam para futura comparação
-        cell.comment = None
-        cell.comment = None   # no-op só para garantir objeto comment
-        cell._comment = None
-        cell.comment = None
-        cell.hyperlink = None
-        cell._hyperlink = None
-
-        # atualiza snapshot em memória (para futuras execuções durante este run)
-        snapshot_ant[key] = {
+        # actualiza snapshot em memória
+        snapshot_ant[key_] = {
             "rev": info["rev"],
             "tam": info["tam"],
-            "ts": info["ts"],
+            "ts":  info["ts"],
             "row": row,
         }
 
@@ -212,7 +203,7 @@ def criar_ou_atualizar_planilha(
     print("Planilha atualizada:", caminho_excel)
 
 # ---------------------------------------------------------------------------
-# Helpers de status
+# Helpers
 # ---------------------------------------------------------------------------
 def _determinar_status(atual: dict, snap: dict | None) -> str:
     if snap is None:
@@ -225,27 +216,31 @@ def _determinar_status(atual: dict, snap: dict | None) -> str:
         return "modificado"
     return "inalterado"
 
-# ---------------------------------------------------------------------------
-# Carrega linhas anteriores
-# ---------------------------------------------------------------------------
-def _carregar_snapshot(ws, linha_titulo: int, col_prev: int,
-                       estado_anterior: Dict[str, Dict[str, object]] | None = None):
+
+def _carregar_snapshot(
+    ws,
+    linha_titulo: int,
+    col_prev: int,
+    estado_anterior: Dict[str, Dict[str, object]] | None = None,
+):
     """
-    Percorre coluna da entrega anterior e devolve
-    { (base,ext): {rev,tam,ts,row} }
+    Lê a coluna da entrega anterior e devolve
+        { (base,ext): {"rev","tam","ts","row"} }
+    Completa com info do JSON salvo (estado_anterior) quando existir.
     """
-    snap = {}
+    snap: Dict[Tuple[str, str], Dict[str, object]] = {}
     for row in range(linha_titulo + 1, ws.max_row + 1):
         nome = ws.cell(row=row, column=col_prev).value
         if not nome:
             continue
         base, ext = _key(nome)
-        rev = _extrair_rev(nome)
-        dados = estado_anterior.get(f"{base}|{ext}", {}) if estado_anterior else {}
+        rev_plan = _extrair_rev(nome)
+        dados_json = estado_anterior.get(f"{base}|{ext}", {}) if estado_anterior else {}
+
         snap[(base, ext)] = {
-            "rev": dados.get("revisao", rev),
-            "tam": dados.get("tamanho"),
-            "ts": dados.get("timestamp"),
+            "rev": dados_json.get("revisao", rev_plan),
+            "tam": dados_json.get("tamanho"),
+            "ts":  dados_json.get("timestamp"),
             "row": row,
         }
     return snap
