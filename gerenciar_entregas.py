@@ -29,6 +29,16 @@ from typing import Dict, List, Sequence, Tuple
 from utils.planilha_gerador import criar_ou_atualizar_planilha
 
 # -----------------------------------------------------
+# Dependência externa opcional ─ send2trash
+# -----------------------------------------------------
+try:
+    from send2trash import send2trash  # para mover arquivos à lixeira com segurança
+except ImportError:
+    send2trash = None  # fallback; avisaremos ao tentar apagar
+
+from utils.planilha_gerador import criar_ou_atualizar_planilha
+
+# -----------------------------------------------------
 # Dependência externa obrigatória ─ openpyxl
 # -----------------------------------------------------
 try:
@@ -105,35 +115,61 @@ GRD_MASTER_NOME = "GRD_ENTREGAS.xlsx"   # arquivo único que receberá todas as 
 # -----------------------------------------------------
 TIPO_ENTREGA_GLOBAL: str | None = None   # "AP" ou "PE" – definido no modal
 
-def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk) -> str | None:
+def _center(win: tk.Toplevel | tk.Tk, parent: tk.Toplevel | tk.Tk | None = None) -> None:
+    """Posiciona win no centro da tela ou do parent."""
+    win.update_idletasks()                         # garante tamanho real
+    w, h = win.winfo_width(), win.winfo_height()
+
+    if parent:
+        parent.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - h) // 2
+    else:
+        x = (win.winfo_screenwidth() - w) // 2
+        y = (win.winfo_screenheight() - h) // 2
+
+    win.geometry(f"{w}x{h}+{x}+{y}")
+
+
+def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk,  size: tuple[int, int] = (480, 280)) -> str | None:
     """
     Abre um Toplevel modal e retorna "AP", "PE" ou None (cancelado).
     """
     escolha = {"val": None}
 
     win = tk.Toplevel(master)
+    win.withdraw()                    # evita mostrar fora do lugar
     win.title("Tipo de Entrega")
     win.transient(master)
     win.grab_set()
     win.resizable(False, False)
+    win.geometry(f"{size[0]}x{size[1]}")
 
-    ttk.Label(win, text="Escolha o tipo de entrega:", font=("Arial", 11, "bold")
-              ).pack(pady=(12, 6), anchor="w", padx=20)
+    ttk.Label(
+        win,
+        text="Escolha o tipo de entrega:",
+        font=("Arial", 11, "bold")
+    ).pack(pady=(12, 6), anchor="w", padx=20)
+
     var = tk.StringVar(value="AP")
-    frm = ttk.Frame(win); frm.pack(padx=20, pady=5, anchor="w")
-    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var
-                    ).pack(anchor="w")
-    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var
-                    ).pack(anchor="w")
+    frm = ttk.Frame(win); frm.pack(padx=20, pady=5, anchor="c")
+    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var).pack(anchor="c")
+    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var).pack(anchor="c")
 
-    def _confirmar():
+    # ---- botões ----
+    def _ok():
         escolha["val"] = var.get()
-        win.grab_release()
         win.destroy()
-    ttk.Separator(win).pack(fill="x", pady=10, padx=5)
-    ttk.Button(win, text="Confirmar", command=_confirmar
-               ).pack(pady=(0, 12))
 
+    def _cancel():
+        win.destroy()
+
+    btn_box = ttk.Frame(win); btn_box.pack(pady=(8, 12))
+    ttk.Button(btn_box, text="OK", command=_ok).pack(side="left", padx=6)
+    ttk.Button(btn_box, text="Cancelar", command=_cancel).pack(side="left", padx=6)
+
+    _center(win, master)             # posição final
+    win.deiconify()                  # exibe já centralizado
     master.wait_window(win)
     return escolha["val"]
 
@@ -695,6 +731,191 @@ def selecionar_pasta_entrega(diretorio_inicial: str):
     root.destroy()
     return pasta
 
+class TelaVisualizacaoEntregaAnterior(tk.Tk):
+    """Mostra arquivos da entrega AP/PE mais recente e permite renomear/excluir."""
+
+    def __init__(self, pasta_entregas: str, projeto_num: str, disciplina: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title("Entrega Anterior – Visualização")
+        self.geometry("1000x600")
+        self.resizable(True, True)
+        self.configure(bg="#f5f5f5")
+
+        self.pasta_entregas = pasta_entregas  # caminho para 1.ENTREGAS
+        self.projeto_num = projeto_num
+        self.disciplina = disciplina
+
+        # ------ estado ------
+        self.tipo_var = tk.StringVar(value="AP")  # AP ou PE selecionado para visualização
+        self.lista_arquivos: list[tuple[str, str, int, str, str]] = []  # (rev, nome, tam, cam, dt)
+
+        # UI ------------------------------------------------------------------
+        header = tk.Frame(self, bg="#2c3e50")
+        header.pack(fill=tk.X)
+        tk.Label(header, text=f"Projeto {projeto_num}  •  {disciplina}", fg="white", bg="#2c3e50",
+                 font=("Helvetica", 14, "bold")).pack(padx=10, pady=6, anchor="w")
+
+        ctrl = tk.Frame(self)
+        ctrl.pack(fill=tk.X, padx=10, pady=(10, 5))
+        tk.Label(ctrl, text="Visualizar entregas de:").pack(side=tk.LEFT)
+        ttk.Combobox(ctrl, values=["AP", "PE"], textvariable=self.tipo_var, width=4,
+                     state="readonly").pack(side=tk.LEFT, padx=5)
+        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados
+                    ).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Avançar", command=self._avancar).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Voltar", command=self._voltar).pack(side=tk.RIGHT, padx=5)
+
+        # tabela --------------------------------------------------------------
+        tbl_frame = tk.Frame(self)
+        tbl_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.sb_y = tk.Scrollbar(tbl_frame, orient="vertical")
+        self.sb_y.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree = ttk.Treeview(tbl_frame, columns=("nome", "dt", "tam"), show="headings",
+                                 yscrollcommand=self.sb_y.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.sb_y.config(command=self.tree.yview)
+        self.tree.heading("nome", text="Nome do arquivo", anchor="w")
+        self.tree.heading("dt", text="Data mod.")
+        self.tree.heading("tam", text="Tamanho (KB)")
+        self.tree.column("nome", width=400, anchor="w")
+        self.tree.column("dt", width=130, anchor="center")
+        self.tree.column("tam", width=100, anchor="e")
+
+        self.tree.bind("<Double-1>", self._iniciar_edicao_nome)
+
+        self._carregar_entrega()  # inicial
+
+    # ------------------------------------------------------------------
+    # lógica de descoberta de entrega mais recente
+    # ------------------------------------------------------------------
+    def _folder_mais_recente(self, tipo: str) -> str | None:
+        pasta_tipo = os.path.join(self.pasta_entregas, tipo)
+        if not os.path.isdir(pasta_tipo):
+            return None
+        candidatas = []
+        for d in os.listdir(pasta_tipo):
+            if d.endswith("-OBSOLETO"):
+                continue
+            # pattern "X.AP - Entrega-Y" ou "X.PE - Entrega-Y"
+            m = re.search(r"Entrega-(\d+)$", d)
+            if m:
+                candidatas.append((int(m.group(1)), d))
+        if not candidatas:
+            return None
+        _, pasta_nome = max(candidatas, key=lambda t: t[0])
+        return os.path.join(pasta_tipo, pasta_nome)
+
+    def _carregar_entrega(self):
+        self.tree.delete(*self.tree.get_children())
+        self.lista_arquivos.clear()
+
+        pasta = self._folder_mais_recente(self.tipo_var.get())
+        if not pasta:
+            messagebox.showinfo("Info",
+                                "Nenhuma entrega foi encontrada na pasta selecionada. "
+                                "Essa pode ser a primeira entrega. Você pode continuar normalmente "
+                                "para adicionar os arquivos.")
+            return
+
+        for f in os.listdir(pasta):
+            cam = os.path.join(pasta, f)
+            if not os.path.isfile(cam):
+                continue
+            tam_kb = os.path.getsize(cam) // 1024
+            dt_mod = datetime.datetime.fromtimestamp(os.path.getmtime(cam)).strftime("%d/%m/%Y %H:%M")
+            rv, _ = self._identificar_rev(f)
+            self.lista_arquivos.append((rv, f, os.path.getsize(cam), cam, dt_mod))
+            iid = self.tree.insert("", tk.END, values=(f, dt_mod, tam_kb))
+            # marca para uso posterior (cam path)
+            self.tree.set(iid, "cam_full", cam)
+
+    # util simples para pegar revisao do nome (usa regex já presente no código original)
+    @staticmethod
+    def _identificar_rev(nome):
+        nb, rev, ex = identificar_nome_com_revisao(nome)
+        return rev, ex
+
+    # --------------------------- edição ------------------------------
+    def _iniciar_edicao_nome(self, event):
+        iid = self.tree.identify_row(event.y)
+        if not iid:
+            return
+        col = self.tree.identify_column(event.x)
+        if col != "#1":  # só permite editar coluna 'nome'
+            return
+        x, y, w, h = self.tree.bbox(iid, col)
+        valor_antigo = self.tree.set(iid, "nome")
+
+        entry = tk.Entry(self.tree)
+        entry.place(x=x, y=y, width=w, height=h)
+        entry.insert(0, valor_antigo)
+        entry.focus_set()
+
+        def _salvar(e):
+            novo_nome = entry.get().strip()
+            entry.destroy()
+            if not novo_nome or novo_nome == valor_antigo:
+                return
+            # renomeia no sistema de arquivos
+            idx = self.tree.index(iid)
+            cam_antigo = self.lista_arquivos[idx][3]
+            novo_cam = os.path.join(os.path.dirname(cam_antigo), novo_nome)
+            try:
+                os.rename(cam_antigo, novo_cam)
+            except OSError as err:
+                messagebox.showerror("Erro", f"Falha ao renomear arquivo:\n{err}")
+                return
+            # atualiza estruturas
+            tam, dtmod = self.lista_arquivos[idx][2], self.lista_arquivos[idx][4]
+            self.lista_arquivos[idx] = (self.lista_arquivos[idx][0], novo_nome, tam, novo_cam, dtmod)
+            self.tree.set(iid, "nome", novo_nome)
+        entry.bind("<Return>", _salvar)
+        entry.bind("<FocusOut>", _salvar)
+
+    # --------------------------- exclusão ----------------------------
+    def _excluir_selecionados(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        if not messagebox.askyesno("Confirmação", "Tem certeza de que deseja excluir os arquivos selecionados?\n"
+                                                  "Eles serão enviados à lixeira."):
+            return
+        erros = []
+        for iid in sel:
+            idx = self.tree.index(iid)
+            _, nome, _, cam_full, _ = self.lista_arquivos[idx]
+            try:
+                if send2trash:
+                    send2trash(cam_full)
+                else:
+                    os.remove(cam_full)
+            except OSError as err:
+                erros.append(str(err))
+                continue
+            # remove da lista e UI
+            self.tree.delete(iid)
+            self.lista_arquivos.pop(idx)
+        if erros:
+            messagebox.showwarning("Aviso", "Alguns arquivos não puderam ser excluídos:\n" + "\n".join(erros))
+
+    # --------------------------- navegação ---------------------------
+    def _avancar(self):
+        # monta lista no formato esperado pela TelaAdicaoArquivos
+        lista_init = []
+        for rv, nome, tam, cam, dt in self.lista_arquivos:
+            lista_init.append((rv, nome, tam, cam, dt))
+        self.destroy()
+        TelaAdicaoArquivos(lista_inicial=lista_init, pasta_entrega=self.pasta_entregas,
+                           numero_projeto=self.projeto_num).mainloop()
+
+    def _voltar(self):
+        self.destroy()
+        # retorna para seleção de disciplina reabrindo janela anterior
+        # NOTA: simplificação – reiniciamos script mantendo experiência original
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
 # -----------------------------------------------------
 # Janela 1: TelaAdicaoArquivos
@@ -1595,11 +1816,15 @@ def main():
     PASTA_ENTREGA_GLOBAL  = pasta_entrega
     NUM_PROJETO_GLOBAL    = num_proj
 
-    # abre a 1ª janela já indicando a pasta
-    app = TelaAdicaoArquivos(pasta_entrega=pasta_entrega,
-                         numero_projeto=num_proj)
-    app.mainloop()
+    # ➡️ NOVO PASSO: exibe entrega anterior antes da TelaAdicaoArquivos
+    TelaVisualizacaoEntregaAnterior(
+        pasta_entregas=pasta_entrega,
+        projeto_num=num_proj,
+        disciplina=os.path.basename(os.path.dirname(pasta_entrega))
+    ).mainloop()
 
-
+# -----------------------------------------------------------------------------
+# Entrada padrão
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     main()

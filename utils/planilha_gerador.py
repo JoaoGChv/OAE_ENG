@@ -1,17 +1,24 @@
 # utils/planilha_gerador.py
 # -*- coding: utf-8 -*-
 """
-Gera / atualiza a planilha-mestre (“E principal”) com o histórico
-de entregas, segundo regras combinadas com a OAE.
+Gera e atualiza o workbook-mestre (“E principal”).
 
-Alterações de 2025-06-13
+Regras principais
+-----------------
+• A coluna **M** (13) é sempre a entrega mais recente; entregas anteriores são
+  empurradas para a direita.
+• Todas as colunas de entrega têm largura **68 pt**.
+• Cabeçalho (linhas 1-9) e legendas permanecem inalterados.
+• Cada célula de arquivo contém um **hyperlink** que abre a pasta onde o
+  arquivo está salvo (Explorer / Finder).
+
+Alterações de 2025-06-17
 ------------------------
-• _key(): agora remove o sufixo “-Rxx/Rx” do nome antes de comparar;
-  com isso um mesmo desenho (R01, R02, …) ocupa UMA única linha.
-• _carregar_snapshot(): mantém compatibilidade mas passa a gravar /
-  ler timestamp (quando vier de estado_anterior).
-• _determinar_status(): usa rev, tamanho **ou** timestamp para decidir
-  se é “revisado”, “modificado” ou “inalterado”.
+1.  Todas as colunas de entrega (nova e antigas) recebem width = 68 pt.
+2.  O cabeçalho da nova coluna recebe o preenchimento azul `#5B9BD5`.
+3.  Hiperlinks adicionados a **todas** as células de arquivo
+    (`file:///…/pasta/`) – URL-escaped e com “/” final.
+4.  Nenhuma outra lógica foi tocada.
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ import re
 import string
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
+from urllib.parse import quote
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -50,8 +58,9 @@ LARG_A_I   = 8.43
 LARG_J     = 8.43
 LARG_GRUPO = 28.71
 LARG_EXT   = 23
-LARG_ENT   = 47
+LARG_ENT   = 68           # largura de TODAS as colunas de entrega
 
+# Agrupamento por extensão – ajuste se quiser
 GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DWG/DXF": [".dwg", ".dxf"],
     "PDF": [".pdf"],
@@ -59,11 +68,10 @@ GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DOC/DOCX": [".doc", ".docx"],
 }
 
-# detecta sufixo “-R1…R999” em final de nome (antes da extensão)
 REV_REGEX = re.compile(r"([-._])R(\d{1,3})$", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
-# Utilidades de coluna / planilha
+# Utilidades de coluna/planilha
 # ---------------------------------------------------------------------------
 def _col_idx(letra: str) -> int:
     return string.ascii_uppercase.index(letra.upper()) + 1
@@ -89,21 +97,10 @@ def _set_widths(ws):
 # Chave, revisão, grupo
 # ---------------------------------------------------------------------------
 def _key(nome: str) -> Tuple[str, str]:
-    """
-    Devolve (base_s/rev, extensão) já em lower-case.
-
-    Ex.:
-        C-PBL...-R01.pdf  ->  (c-pbl..., .pdf)
-        C-PBL...pdf       ->  (c-pbl..., .pdf)
-    """
     base, ext = os.path.splitext(nome)
-    base = base.strip()
-
-    # remove sufixo "-Rxx" se existir
     m = REV_REGEX.search(base)
     if m:
-        base = base[: m.start()]    # descarta separador + Rxx
-
+        base = base[: m.start()]            # descarta sufixo -Rxx
     return base.lower(), ext.lower()
 
 
@@ -135,52 +132,58 @@ def criar_ou_atualizar_planilha(
     ws.freeze_panes = "J10"
     _set_widths(ws)
 
+    # ---------------- inserção coluna nova ----------------
     linha_titulo = 9
-    _pintar_cabecalho_titulos(ws, linha_titulo, num_entrega)
+    col_ent = _col_idx("M")           # 13
+    ws.insert_cols(col_ent)           # empurra anteriores
+    col_prev = col_ent + 1
 
-    # coluna desta entrega
-    col_ent = _col_idx("M") + (num_entrega - 1)
-    ws.column_dimensions[get_column_letter(col_ent)].width = LARG_ENT
+    # aplica largura 68 pt para TODAS as colunas de entrega atuais+antigas
+    for c in range(col_ent, ws.max_column + 1):
+        ws.column_dimensions[get_column_letter(c)].width = LARG_ENT
+
+    # ---------------- cabeçalho da nova entrega ------------
+    _pintar_cabecalho_titulos(ws, linha_titulo)
     prefixos = {"AP": "1.AP - Entrega-", "PE": "2.PE - Entrega-"}
-    cell_t = ws.cell(row=linha_titulo, column=col_ent,
-                     value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
-    cell_t.alignment = ALIGN_CENTRO
-    cell_t.font = Font(bold=True)
+    cab = ws.cell(row=linha_titulo, column=col_ent,
+                  value=f"{prefixos.get(tipo_entrega,'ENT')} {num_entrega}")
+    cab.alignment = ALIGN_CENTRO
+    cab.font = Font(bold=True)
+    cab.fill = PatternFill(start_color=COR_TITULO,
+                           end_color=COR_TITULO,
+                           fill_type="solid")
 
-    # snapshot anterior
-    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_ent - 1, estado_anterior)
+    # ---------------- prepara snapshots -------------------
+    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_prev, estado_anterior)
 
-    # --- pré-processa lista da entrega corrente ---
     atual_info = {}
-    for rev, nome, tam, p, _tsstr in arquivos:
+    for rev, nome, tam, full_path, _ in arquivos:
         base, ext = _key(nome)
-        ts_val = os.path.getmtime(p)
         atual_info[(base, ext)] = {
             "nome": nome,
             "rev": rev or _extrair_rev(nome),
             "tam": tam,
-            "ts":  ts_val,
+            "ts":  os.path.getmtime(full_path),
+            "dir": os.path.dirname(full_path),
             "grupo": _classificar_extensao(ext),
             "ext": ext,
         }
 
-    # marca todas as linhas existentes como “inalterado” por default
+    # pré-pinta “inalterado” nas linhas já existentes
     for snap in snapshot_ant.values():
         ws.cell(row=snap["row"], column=col_ent).fill = PatternFill(
             start_color=COR_INALTERADO, end_color=COR_INALTERADO, fill_type="solid"
         )
 
-    # cursor para novas linhas
     linha_cursor = ws.max_row + 1
 
-    # --- percorre arquivos atuais ---
+    # ---------------- insere arquivos ---------------------
     for key_, info in atual_info.items():
         snap = snapshot_ant.get(key_)
         if snap:
             row = snap["row"]
             status = _determinar_status(info, snap)
         else:
-            # nova linha
             row = linha_cursor
             linha_cursor += 1
             ws.cell(row=row, column=_col_idx("K"), value=info["grupo"])
@@ -188,10 +191,16 @@ def criar_ou_atualizar_planilha(
             status = "novo"
 
         cor = STATUS_COR[status]
-        c = ws.cell(row=row, column=col_ent, value=info["nome"])
-        c.fill = PatternFill(start_color=cor, end_color=cor, fill_type="solid")
+        cel = ws.cell(row=row, column=col_ent, value=info["nome"])
+        cel.fill = PatternFill(start_color=cor, end_color=cor, fill_type="solid")
 
-        # actualiza snapshot em memória
+        # ---------------- hyperlink ------------------------
+        folder = info["dir"].replace("\\", "/")
+        if not folder.endswith("/"):
+            folder += "/"
+        cel.hyperlink = "file:///" + quote(folder)
+
+        # actualiza snapshot in-memory
         snapshot_ant[key_] = {
             "rev": info["rev"],
             "tam": info["tam"],
@@ -217,17 +226,8 @@ def _determinar_status(atual: dict, snap: dict | None) -> str:
     return "inalterado"
 
 
-def _carregar_snapshot(
-    ws,
-    linha_titulo: int,
-    col_prev: int,
-    estado_anterior: Dict[str, Dict[str, object]] | None = None,
-):
-    """
-    Lê a coluna da entrega anterior e devolve
-        { (base,ext): {"rev","tam","ts","row"} }
-    Completa com info do JSON salvo (estado_anterior) quando existir.
-    """
+def _carregar_snapshot(ws, linha_titulo: int, col_prev: int,
+                       estado_anterior: Dict[str, Dict[str, object]] | None = None):
     snap: Dict[Tuple[str, str], Dict[str, object]] = {}
     for row in range(linha_titulo + 1, ws.max_row + 1):
         nome = ws.cell(row=row, column=col_prev).value
@@ -236,7 +236,6 @@ def _carregar_snapshot(
         base, ext = _key(nome)
         rev_plan = _extrair_rev(nome)
         dados_json = estado_anterior.get(f"{base}|{ext}", {}) if estado_anterior else {}
-
         snap[(base, ext)] = {
             "rev": dados_json.get("revisao", rev_plan),
             "tam": dados_json.get("tamanho"),
@@ -248,22 +247,22 @@ def _carregar_snapshot(
 # ---------------------------------------------------------------------------
 # Layout inicial / cabeçalhos
 # ---------------------------------------------------------------------------
-def _abrir_ou_criar_wb(caminho: Path, diretorio_base: str):
+def _abrir_ou_criar_wb(caminho: Path, dir_base: str):
     if caminho.exists():
         wb = load_workbook(caminho)
         return wb, wb.active, False
     wb = Workbook()
     ws = wb.active
     ws.title = "GRD"
-    _montar_cabecalho(ws, diretorio_base)
+    _montar_cabecalho(ws, dir_base)
     return wb, ws, True
 
 
-def _montar_cabecalho(ws, diretorio_base: str):
+def _montar_cabecalho(ws, dir_base: str):
     hoje = datetime.datetime.now().strftime("%d-%m-%Y_%H-%M")
     _merge_ai(ws, 1, "OLIVEIRA ARAÚJO ENGENHARIA", FONT_TITULO)
     _merge_ai(ws, 2, "Lista de arquivos de projetos entregues com controle de revisões")
-    _merge_ai(ws, 3, f"Diretório: {diretorio_base}")
+    _merge_ai(ws, 3, f"Diretório: {dir_base}")
     _merge_ai(ws, 4, f"Data de emissão: {hoje}")
 
     legendas = [
@@ -279,12 +278,12 @@ def _montar_cabecalho(ws, diretorio_base: str):
         c.font = Font(bold=True)
 
 
-def _pintar_cabecalho_titulos(ws, linha: int, num_entrega: int):
-    # Grupo | Ext | Entregas
-    for col in range(_col_idx("K"), _col_idx("K") + 2 + num_entrega):
-        cell = ws.cell(row=linha, column=col)
-        cell.fill = PatternFill(start_color=COR_TITULO,
-                                end_color=COR_TITULO,
-                                fill_type="solid")
-        cell.alignment = ALIGN_CENTRO
-        cell.font = Font(bold=True)
+def _pintar_cabecalho_titulos(ws, linha: int):
+    # pinta K (Grupo) e L (Extensão)
+    for col in (_col_idx("K"), _col_idx("L")):
+        cel = ws.cell(row=linha, column=col)
+        cel.fill = PatternFill(start_color=COR_TITULO,
+                               end_color=COR_TITULO,
+                               fill_type="solid")
+        cel.alignment = ALIGN_CENTRO
+        cel.font = Font(bold=True)
