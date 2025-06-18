@@ -734,7 +734,7 @@ def selecionar_pasta_entrega(diretorio_inicial: str):
 class TelaVisualizacaoEntregaAnterior(tk.Tk):
     """Mostra arquivos da entrega AP/PE mais recente e permite renomear/excluir."""
 
-    def __init__(self, pasta_entregas: str, projeto_num: str, disciplina: str, *args, **kwargs):
+    def __init__(self, pasta_entregas: str, projeto_num: str, disciplina: str, lista_inicial=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("Entrega Anterior – Visualização")
         self.geometry("1000x600")
@@ -744,6 +744,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         self.pasta_entregas = pasta_entregas  # caminho para 1.ENTREGAS
         self.projeto_num = projeto_num
         self.disciplina = disciplina
+        self.lista_inicial = lista_inicial 
 
         # ------ estado ------
         self.tipo_var = tk.StringVar(value="AP")  # AP ou PE selecionado para visualização
@@ -785,7 +786,10 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
 
         self.tree.bind("<Double-1>", self._iniciar_edicao_nome)
 
-        self._carregar_entrega()  # inicial
+        if self.lista_inicial:
+            self._carregar_lista_inicial()
+        else:
+            self._carregar_entrega()
 
     # ------------------------------------------------------------------
     # lógica de descoberta de entrega mais recente
@@ -808,6 +812,9 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         return os.path.join(pasta_tipo, pasta_nome)
 
     def _carregar_entrega(self):
+        if "cam_full" not in self.tree["columns"]:
+            self.tree["columns"] = self.tree["columns"] + ("cam_full",)
+            self.tree.column("cam_full", width=0, stretch=False)
         self.tree.delete(*self.tree.get_children())
         self.lista_arquivos.clear()
 
@@ -830,6 +837,26 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             iid = self.tree.insert("", tk.END, values=(f, dt_mod, tam_kb))
             # marca para uso posterior (cam path)
             self.tree.set(iid, "cam_full", cam)
+    
+    # ------------------------------------------------------------------
+    # ### NOVO ###
+    def _carregar_lista_inicial(self):
+        """Preenche a Treeview usando self.lista_inicial recebida do botão Voltar."""
+        if not self.lista_inicial:
+            return
+        # garante coluna oculta
+        if "cam_full" not in self.tree["columns"]:
+            self.tree["columns"] = self.tree["columns"] + ("cam_full",)
+            self.tree.column("cam_full", width=0, stretch=False)
+
+        self.tree.delete(*self.tree.get_children())
+        for rv, nome, tam, cam, dt in self.lista_inicial:
+            iid = self.tree.insert("", tk.END,
+                                values=(nome, dt, tam // 1024))
+            self.tree.set(iid, "cam_full", cam)
+            # mantém lista interna sincronizada
+        self.lista_arquivos = self.lista_inicial.copy()
+
 
     # util simples para pegar revisao do nome (usa regex já presente no código original)
     @staticmethod
@@ -926,6 +953,10 @@ class TelaAdicaoArquivos(tk.Tk):
     """
     def __init__(self, lista_inicial=None, pasta_entrega: str | None = None, numero_projeto: str | None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.pasta_entrega   = pasta_entrega
+        self.numero_projeto  = numero_projeto
+        self.disciplina      = (os.path.basename(os.path.dirname(pasta_entrega))if pasta_entrega else "")
         root_frame = tk.Frame(self)          # capa principal
         root_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -988,8 +1019,7 @@ class TelaAdicaoArquivos(tk.Tk):
         tk.Button(btn_frame, text="Visualizar tudo", command=self.ativar_visualizar_tudo).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Agrupar por tipo", command=self.ativar_agrupado).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(btn_frame, text="Voltar / Cancelar", command=self.voltar_cancelar).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_frame, text="Analisar", command=self.proxima_janela_nomenclatura).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Analisar", width=18, command=self.proxima_janela_nomenclatura).pack(side=tk.RIGHT, padx=5)
 
         self.canvas_global = tk.Canvas(content)
         self.canvas_global.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1004,6 +1034,16 @@ class TelaAdicaoArquivos(tk.Tk):
 
         self.canvas_global.bind("<Configure>", self.on_canvas_configure)
         self.inner_frame.bind("<Configure>", self.on_frame_configure)
+
+        bottom = tk.Frame(content)
+        # ancorado no rodapé:
+        bottom.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
+
+        tk.Button(bottom, text="Cancelar", width=12,
+                  command=self._cancelar).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(bottom, text="Voltar", width=12,
+                  command=self._voltar).pack(side=tk.RIGHT, padx=5)
 
         self.arquivos_por_grupo = {}
 
@@ -1025,7 +1065,7 @@ class TelaAdicaoArquivos(tk.Tk):
 
         self.render_view()
 
-        if pasta_entrega:
+        if pasta_entrega and (not lista_inicial):
             self._abrir_filedialog_inicial(pasta_entrega)
 
     # --------------------------------------------------
@@ -1072,10 +1112,27 @@ class TelaAdicaoArquivos(tk.Tk):
     def on_frame_configure(self, event):
         self.canvas_global.configure(scrollregion=self.canvas_global.bbox("all"))
 
-    def voltar_cancelar(self):
+    def _cancelar(self):
         self.destroy()
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
+        sys.exit(0)
+
+    def _voltar(self):
+        lista_atual = []
+        for grupo, lst in self.arquivos_por_grupo.items():
+            for (path, no_arq, base, rev, data_mod, ext) in lst:
+                tam = os.path.getsize(path)
+                arq = os.path.basename(path)
+                lista_atual.append((rev, arq, tam, path, data_mod))
+
+        self.destroy()
+
+        from gerenciar_entregas import TelaVisualizacaoEntregaAnterior
+        TelaVisualizacaoEntregaAnterior(
+            pasta_entregas=self.pasta_entrega,
+            projeto_num=self.numero_projeto,
+            disciplina=self.disciplina,
+            lista_inicial=lista_atual
+        ).mainloop()
 
     def adicionar_arquivos(self):
         init_dir = carregar_ultimo_diretorio()
