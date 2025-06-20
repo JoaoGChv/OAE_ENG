@@ -125,8 +125,8 @@ def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str) -> None:
         m = re.search(r"(1\.AP|2\.PE)\s*-\s*Entrega-\s*(\d+)", str(cab))
         if m:
             numero = m.group(2)
-            prefixo = "1.AP - Entrega-" if m.group(1).startswith("1") else "2.PE - Entrega-"
             subdir = "AP" if m.group(1).startswith("1") else "PE"
+            prefixo = f"{m.group(1)} - Entrega-"
             pasta = os.path.join(dir_base, subdir, f"{prefixo}{numero}")
 
             if not os.path.exists(pasta):
