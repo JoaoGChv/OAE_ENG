@@ -16,6 +16,14 @@ Principais ajustes:
 
 from __future__ import annotations
 
+import urllib.parse as _up          # já é stdlib, não quebra nada
+_orig_quote = _up.quote             # guardamos o original
+
+def _quote_preservando_drive(s: str, safe: str = "/:") -> str:
+    return _orig_quote(s, safe=safe)   # ‘:’ não será escapado
+
+_up.quote = _quote_preservando_drive
+
 import datetime
 import json
 import os
@@ -594,6 +602,23 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
 # Movimento de obsoletos
 # -----------------------------------------------------
 
+_SIGLAS_STATUS = {"E", "C", "P", "R"}       # válidas para troca
+_SEP_PATTERN   = r"[-_.]"                   # separadores aceitos
+
+def renomear_para_arquivado(nome_arquivo: str) -> str:
+    """
+    Se o nome começar com 'E-', 'C_', 'P.' ou 'R-'… troca pela letra 'A'.
+    Mantém o restante (inclusive extensão). Não altera se já começa com A.
+    """
+    # divide em base+ext
+    base, ext = os.path.splitext(nome_arquivo)
+    m = re.match(rf"^([ECPR])({_SEP_PATTERN}.+)$", base, re.IGNORECASE)
+    if not m:
+        return nome_arquivo  # não corresponde ou já é 'A'
+    # aplica a troca preservando caixa da sigla original (A maiúsculo)
+    novo_base = "A" + m.group(2)
+    return novo_base + ext
+
 def mover_obsoletos_e_grd_anterior(obsoletos, diretorio: str, num_entrega_atual: int):
     n_anterior = num_entrega_atual - 1
     data_atual = datetime.datetime.now().strftime("%d_%m_%Y")
@@ -612,9 +637,25 @@ def mover_obsoletos_e_grd_anterior(obsoletos, diretorio: str, num_entrega_atual:
 
     for rv, arq, _, cam, _ in obsoletos:
         try:
-            novo_caminho = os.path.join(pasta_obsoletos, arq)
-            tentar_novamente_operacao(shutil.move, cam, novo_caminho)
+            # >>> PATCH: renomeia primeira sigla
+            novo_nome = renomear_para_arquivado(arq)
+            destino   = os.path.join(pasta_obsoletos, novo_nome)
+
+            # evita colisão se já existir
+            if os.path.exists(destino):
+                base, ext = os.path.splitext(novo_nome)
+                seq = 1
+                while True:
+                    cand = f"{base}_dup{seq}{ext}"
+                    destino = os.path.join(pasta_obsoletos, cand)
+                    if not os.path.exists(destino):
+                        break
+                    seq += 1
+
+            tentar_novamente_operacao(shutil.move, cam, destino)
+
         except FileNotFoundError:
+            # já não existe – ignora
             continue
 
 
@@ -715,7 +756,6 @@ def janela_selecao_projeto():
     tree.column("Nome do Projeto", anchor="w")
     tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-    # preenche lista completa
     for idx, (n, _, nome_disp) in enumerate(projetos):
         tree.insert("", tk.END, text=str(idx), values=(n, nome_disp))
 
@@ -1675,18 +1715,45 @@ class TelaVerificacaoRevisao(tk.Tk):
         try:
             if TIPO_ENTREGA_GLOBAL:
                 criar_pasta_entrega_ap_pe(
-                    self.diretorio,                     # pasta 1.ENTREGAS da disciplina
-                    TIPO_ENTREGA_GLOBAL,                # "AP" ou "PE"
-                    self.arquivos_novos
-                    + self.arquivos_revisados
-                    + self.arquivos_alterados           # mesma lista que foi confirmada
+                    self.diretorio,
+                    TIPO_ENTREGA_GLOBAL,
+                    self.arquivos_novos + self.arquivos_revisados + self.arquivos_alterados
                 )
+
+            # ------------------------------------------------------------------
+            # NOVO ▸ garante que todos os caminhos usados na planilha apontem
+            #       para a pasta de entrega recém-criada (…/AP|PE/Entrega-N)
+            # ------------------------------------------------------------------
+            subdir = "AP" if TIPO_ENTREGA_GLOBAL == "AP" else "PE"
+            pasta_base = os.path.join(self.diretorio, subdir)
+
+            entregas_ativas = [
+                    d for d in os.listdir(pasta_base)
+                    if d.startswith(("1.AP - Entrega-", "2.PE - Entrega-"))
+                    and not d.endswith("-OBSOLETO")]
+            
+            if entregas_ativas:                         
+                pasta_destino = os.path.join(
+                    pasta_base,
+                    max(entregas_ativas,
+                        key=lambda n: int(re.search(r"(\d+)$", n).group(1)))
+                )
+
+                def _redir(lista):
+                    for i, tup in enumerate(list(lista)):
+                        nome = os.path.basename(tup[3])
+                        lista[i] = tup[:3] + (os.path.join(pasta_destino, nome),) + tup[4:]
+
+                _redir(self.arquivos_novos)
+                _redir(self.arquivos_revisados)
+                _redir(self.arquivos_alterados)
+            # ------------------------------------------------------------------
+
         except Exception as e:
             messagebox.showerror(
                 "Erro",
                 f"Falha ao criar/copiar pasta de entrega AP/PE:\n{e}"
             )
-            # se der erro, ainda assim seguimos para pos_processamento
 
         # ----------------------------------------------
         # 1) executa toda a lógica original
@@ -1880,8 +1947,6 @@ def main():
         disciplina=os.path.basename(os.path.dirname(pasta_entrega))
     ).mainloop()
 
-# -----------------------------------------------------------------------------
-# Entrada padrão
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------
 if __name__ == "__main__":
     main()

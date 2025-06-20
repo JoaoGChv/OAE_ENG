@@ -1,36 +1,12 @@
-# utils/planilha_gerador.py
-# -*- coding: utf-8 -*-
-"""
-Gera e atualiza o workbook-mestre (“E principal”).
-
-Regras principais
------------------
-• A coluna **M** (13) é sempre a entrega mais recente; entregas anteriores são
-  empurradas para a direita.
-• Todas as colunas de entrega têm largura **68 pt**.
-• Cabeçalho (linhas 1-9) e legendas permanecem inalterados.
-• Cada célula de arquivo contém um **hyperlink** que abre a pasta onde o
-  arquivo está salvo (Explorer / Finder).
-
-Alterações de 2025-06-17
-------------------------
-1.  Todas as colunas de entrega (nova e antigas) recebem width = 68 pt.
-2.  O cabeçalho da nova coluna recebe o preenchimento azul `#5B9BD5`.
-3.  Hiperlinks adicionados a **todas** as células de arquivo
-    (`file:///…/pasta/`) – URL-escaped e com “/” final.
-4.  Nenhuma outra lógica foi tocada.
-"""
-
 from __future__ import annotations
-
 import datetime
 import os
 import re
 import string
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
-from urllib.parse import quote
-
+import urllib.parse as _up  # apenas para future-proof; não usamos quote agora.
+from urllib.parse import quote as _q  # para percent-encoding de caracteres não-ASCII
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -60,10 +36,9 @@ LARG_GRUPO = 28.71
 LARG_EXT   = 23
 LARG_ENT   = 68           # largura de TODAS as colunas de entrega
 
-# Agrupamento por extensão – ajuste se quiser
 GRUPOS_EXT: Dict[str, Sequence[str]] = {
     "DWG/DXF": [".dwg", ".dxf"],
-    "PDF": [".pdf"],
+    "PDF":     [".pdf"],
     "XLS/XLSX": [".xls", ".xlsx"],
     "DOC/DOCX": [".doc", ".docx"],
 }
@@ -100,7 +75,7 @@ def _key(nome: str) -> Tuple[str, str]:
     base, ext = os.path.splitext(nome)
     m = REV_REGEX.search(base)
     if m:
-        base = base[: m.start()]            # descarta sufixo -Rxx
+        base = base[: m.start()]
     return base.lower(), ext.lower()
 
 
@@ -116,14 +91,58 @@ def _classificar_extensao(ext: str) -> str:
     return "Outros"
 
 # ---------------------------------------------------------------------------
-# Função principal
+# NOVO helper: monta URI file:/// sem percent-encoding
+# ---------------------------------------------------------------------------
+from urllib.parse import quote as _q
+
+def _to_uri_folder(path: str) -> str:
+    path = path.replace("\\", "/").rstrip("/")
+    path = re.sub(r"^([A-Za-z]):/{2,}", r"\1:/", path)     # G:// → G:/
+    path = re.sub(r"-\s+(\d+)", r"-\1", path)              # Entrega-  2 → Entrega-2
+    safe = "/:-_."
+    encoded = "".join(
+        ch if (ch.isalnum() or ch in safe) else _up.quote(ch, safe="")
+        for ch in path
+    )
+    # barra final + “#” evita que o Excel modifique o hyperlink
+    return "file:///" + encoded + "/?open"
+
+    '''# 5) monta URI **com** barra final
+    uri = "file:///" + encoded + "/#"
+    print("[to_uri]", uri)          # log de depuração
+    return uri
+    '''
+# ---------------------------------------------------------------------------
+# Helper que hidrata links faltantes em colunas antigas
+# ---------------------------------------------------------------------------
+def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str):
+    col_first = _col_idx("M")  # 13
+    mapas: Dict[int, str] = {}
+
+    for col in range(col_first, ws.max_column + 1):
+        cab = ws.cell(row=linha_titulo, column=col).value or ""
+        m = re.search(r"(1\.AP|2\.PE)\s*-\s*Entrega-\s*(\d+)", str(cab))
+        if m:
+            subdir = "AP" if cab.strip().startswith("1.") else "PE"
+            mapas[col] = os.path.join(dir_base, subdir, cab.strip())
+
+    for row in range(linha_titulo + 1, ws.max_row + 1):
+        for col, pasta in mapas.items():
+            cel = ws.cell(row=row, column=col)
+            if cel.value:                              # tem nome de arquivo
+                link = _to_uri_folder(pasta)
+                print(f"[hidratar] row {row} col {col} →", link)   #  ←  log
+                cel.hyperlink = link  
+
+# ---------------------------------------------------------------------------
+# Função principal – lógica original preservada
 # ---------------------------------------------------------------------------
 def criar_ou_atualizar_planilha(
     caminho_excel: str | Path,
-    tipo_entrega: str,        # "AP" ou "PE"
-    num_entrega: int,         # 1, 2, 3…
+    tipo_entrega: str,
+    num_entrega: int,
     diretorio_base: str,
-    arquivos: List[Tuple[str, str, int, str, str]],  # (rev, nome, tam, path, ts_str)
+    arquivos: List[Tuple[str, str, int, str, str]],
     estado_anterior: Dict[str, Dict[str, object]] | None = None,
 ):
     caminho_excel = Path(caminho_excel)
@@ -132,17 +151,14 @@ def criar_ou_atualizar_planilha(
     ws.freeze_panes = "J10"
     _set_widths(ws)
 
-    # ---------------- inserção coluna nova ----------------
     linha_titulo = 9
-    col_ent = _col_idx("M")           # 13
-    ws.insert_cols(col_ent)           # empurra anteriores
+    col_ent = _col_idx("M")
+    ws.insert_cols(col_ent)
     col_prev = col_ent + 1
 
-    # aplica largura 68 pt para TODAS as colunas de entrega atuais+antigas
     for c in range(col_ent, ws.max_column + 1):
         ws.column_dimensions[get_column_letter(c)].width = LARG_ENT
 
-    # ---------------- cabeçalho da nova entrega ------------
     _pintar_cabecalho_titulos(ws, linha_titulo)
     prefixos = {"AP": "1.AP - Entrega-", "PE": "2.PE - Entrega-"}
     cab = ws.cell(row=linha_titulo, column=col_ent,
@@ -153,7 +169,6 @@ def criar_ou_atualizar_planilha(
                            end_color=COR_TITULO,
                            fill_type="solid")
 
-    # ---------------- prepara snapshots -------------------
     snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_prev, estado_anterior)
 
     atual_info = {}
@@ -169,7 +184,6 @@ def criar_ou_atualizar_planilha(
             "ext": ext,
         }
 
-    # pré-pinta “inalterado” nas linhas já existentes
     for snap in snapshot_ant.values():
         ws.cell(row=snap["row"], column=col_ent).fill = PatternFill(
             start_color=COR_INALTERADO, end_color=COR_INALTERADO, fill_type="solid"
@@ -177,7 +191,6 @@ def criar_ou_atualizar_planilha(
 
     linha_cursor = ws.max_row + 1
 
-    # ---------------- insere arquivos ---------------------
     for key_, info in atual_info.items():
         snap = snapshot_ant.get(key_)
         if snap:
@@ -194,20 +207,13 @@ def criar_ou_atualizar_planilha(
         cel = ws.cell(row=row, column=col_ent, value=info["nome"])
         cel.fill = PatternFill(start_color=cor, end_color=cor, fill_type="solid")
 
-        # ---------------- hyperlink ------------------------
-        folder = info["dir"].replace("\\", "/")
-        if not folder.endswith("/"):
-            folder += "/"
-        cel.hyperlink = "file:///" + quote(folder)
-
-        # actualiza snapshot in-memory
-        snapshot_ant[key_] = {
-            "rev": info["rev"],
-            "tam": info["tam"],
-            "ts":  info["ts"],
-            "row": row,
-        }
-
+        # ---------- hyperlink (para a PASTA, barra final garantida) ----------
+        folder = info["dir"]
+        link = _to_uri_folder(folder)
+        print("[nova-col] linha", row, "|", link)   # ← LOG
+        cel.hyperlink = link
+    # ---- hidrata colunas antigas ------------------------------------------
+    _hidratar_hyperlinks(ws, linha_titulo, diretorio_base)
     wb.save(caminho_excel)
     print("Planilha atualizada:", caminho_excel)
 
