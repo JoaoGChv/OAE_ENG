@@ -115,7 +115,8 @@ def _to_uri_folder(path: str) -> str:
 # ---------------------------------------------------------------------------
 # Helper que hidrata links faltantes em colunas antigas
 # ---------------------------------------------------------------------------
-def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str):
+def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str) -> None:
+    """Preenche hyperlinks de colunas antigas apontando para as pastas corretas."""
     col_first = _col_idx("M")  # 13
     mapas: Dict[int, str] = {}
 
@@ -123,8 +124,19 @@ def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str):
         cab = ws.cell(row=linha_titulo, column=col).value or ""
         m = re.search(r"(1\.AP|2\.PE)\s*-\s*Entrega-\s*(\d+)", str(cab))
         if m:
-            subdir = "AP" if cab.strip().startswith("1.") else "PE"
-            mapas[col] = os.path.join(dir_base, subdir, cab.strip())
+            numero = m.group(2)
+            prefixo = "1.AP - Entrega-" if m.group(1).startswith("1") else "2.PE - Entrega-"
+            subdir = "AP" if m.group(1).startswith("1") else "PE"
+            pasta = os.path.join(dir_base, subdir, f"{prefixo}{numero}")
+
+            if not os.path.exists(pasta):
+                pai = os.path.dirname(pasta)
+                padrao = f"{prefixo}{numero}-OBSOLETO"
+                candidatos = [p for p in os.listdir(pai) if p.startswith(padrao)] if os.path.isdir(pai) else []
+                if candidatos:
+                    pasta = os.path.join(pai, candidatos[0])
+
+            mapas[col] = pasta
 
     for row in range(linha_titulo + 1, ws.max_row + 1):
         for col, pasta in mapas.items():
