@@ -173,8 +173,8 @@ def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk,  size: tuple[int, int] = 
         win.destroy()
 
     btn_box = ttk.Frame(win); btn_box.pack(pady=(8, 12))
-    ttk.Button(btn_box, text="OK", command=_ok).pack(side="left", padx=6)
-    ttk.Button(btn_box, text="Cancelar", command=_cancel).pack(side="left", padx=6)
+    ttk.Button(btn_box, text="OK", command=_ok, width=15).pack(side="left", padx=6)
+    ttk.Button(btn_box, text="Cancelar", command=_cancel, width=15).pack(side="left", padx=6)
 
     _center(win, master)             # posição final
     win.deiconify()                  # exibe já centralizado
@@ -497,8 +497,8 @@ def janela_erro_revisao(arquivos_alterados):
         janela.destroy()
         sys.exit(0)
 
-    tk.Button(janela, text="Confirmar e sair", command=_encerra).pack(pady=5)
-    tk.Button(janela, text="Ignorar", command=janela.destroy).pack(pady=5)
+    tk.Button(janela, text="Confirmar e sair", command=_encerra, width=15, height=2).pack(pady=5)
+    tk.Button(janela, text="Ignorar", command=janela.destroy, width=15, height=2).pack(pady=5)
     janela.grab_set()
     janela.mainloop()
 
@@ -594,7 +594,7 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
     for nome, dt, caminho in disciplinas:
         tree.insert("", tk.END, values=(nome, dt, caminho))
 
-    tk.Button(root, text="Confirmar", command=confirmar).pack(pady=5)
+    tk.Button(root, text="Confirmar", command=confirmar, width=15, height=2).pack(pady=5)
     root.mainloop()
     return sel["path"]
 
@@ -759,8 +759,7 @@ def janela_selecao_projeto():
     for idx, (n, _, nome_disp) in enumerate(projetos):
         tree.insert("", tk.END, text=str(idx), values=(n, nome_disp))
 
-    tk.Button(root, text="Confirmar", command=confirmar
-              ).pack(pady=5)
+    tk.Button(root, text="Confirmar", command=confirmar, width=15, height=2).pack(pady=10)
     root.mainloop()
     return sel["num"], sel["path"]
 
@@ -801,12 +800,11 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         tk.Label(ctrl, text="Visualizar entregas de:").pack(side=tk.LEFT)
         ttk.Combobox(ctrl, values=["AP", "PE"], textvariable=self.tipo_var, width=4,
                      state="readonly").pack(side=tk.LEFT, padx=5)
-        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega).pack(side=tk.LEFT, padx=5)
+        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega, width=15).pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados
-                    ).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(ctrl, text="Avançar", command=self._avancar).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(ctrl, text="Voltar", command=self._voltar).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados, width=15).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Avançar", command=self._avancar, width=15).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Voltar", command=self._voltar, width=15).pack(side=tk.RIGHT, padx=5)
 
         # tabela --------------------------------------------------------------
         tbl_frame = tk.Frame(self)
@@ -1053,13 +1051,13 @@ class TelaAdicaoArquivos(tk.Tk):
         btn_frame = tk.Frame(container)
         btn_frame.pack(fill=tk.X, pady=5)
 
-        tk.Button(btn_frame, text="Adicionar arquivos", command=self.adicionar_arquivos).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Remover arquivos selecionados", command=self.remover_selecionados).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Adicionar arquivos", command=self.adicionar_arquivos, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Remover arquivos selecionados", command=self.remover_selecionados, width=15, height=2).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(btn_frame, text="Visualizar tudo", command=self.ativar_visualizar_tudo).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Agrupar por tipo", command=self.ativar_agrupado).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Visualizar tudo", command=self.ativar_visualizar_tudo, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Agrupar por tipo", command=self.ativar_agrupado, width=15, height=2).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(btn_frame, text="Analisar", width=18, command=self.proxima_janela_nomenclatura).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Analisar", width=18, command=self.proxima_janela_nomenclatura, height=2).pack(side=tk.RIGHT, padx=5)
 
         self.canvas_global = tk.Canvas(content)
         self.canvas_global.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1079,11 +1077,11 @@ class TelaAdicaoArquivos(tk.Tk):
         # ancorado no rodapé:
         bottom.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
 
-        tk.Button(bottom, text="Cancelar", width=12,
-                  command=self._cancelar).pack(side=tk.LEFT, padx=5)
+        tk.Button(bottom, text="Cancelar", width=15,
+                  command=self._cancelar, height=2).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(bottom, text="Voltar", width=12,
-                  command=self._voltar).pack(side=tk.RIGHT, padx=5)
+        tk.Button(bottom, text="Voltar", width=15,
+                  command=self._voltar, height=2).pack(side=tk.RIGHT, padx=5)
 
         self.arquivos_por_grupo = {}
 
@@ -1431,9 +1429,9 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         frm_botoes = tk.Frame(container)
         frm_botoes.pack(fill=tk.X, pady=5)
 
-        tk.Button(frm_botoes, text="Mostrar Padrão", command=self.mostrar_nomenclatura_padrao).pack(side=tk.LEFT, padx=5)
-        tk.Button(frm_botoes, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
-        tk.Button(frm_botoes, text="Avançar", command=self.avancar).pack(side=tk.RIGHT, padx=5)
+        tk.Button(frm_botoes, text="Mostrar Padrão", command=self.mostrar_nomenclatura_padrao, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(frm_botoes, text="Voltar", command=self.voltar, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(frm_botoes, text="Avançar", command=self.avancar, width=15, height=2).pack(side=tk.RIGHT, padx=5)
 
         # Cria Treeview
         frame_tv = tk.Frame(container)
@@ -1661,9 +1659,9 @@ class TelaVerificacaoRevisao(tk.Tk):
         btn_frame = tk.Frame(container)
         btn_frame.pack(fill=tk.X, pady=5)
 
-        tk.Button(btn_frame, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Confirmar", command=self.confirmar).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_frame, text="Cancelar", command=lambda: (self.destroy(), sys.exit(0))).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Voltar", command=self.voltar, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Confirmar", command=self.confirmar, width=15, height=2).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Cancelar", command=lambda: (self.destroy(), sys.exit(0)), width=12, height=2).pack(side=tk.RIGHT, padx=5)
 
     def criar_tabela(self, parent, titulo, arr):
         lf = tk.LabelFrame(parent, text=titulo, font=("Arial", 11, "bold"))
