@@ -900,9 +900,10 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         ctrl = tk.Frame(self)
         ctrl.pack(fill=tk.X, padx=10, pady=(10, 5))
         tk.Label(ctrl, text="Visualizar entregas de:").pack(side=tk.LEFT)
-        ttk.Combobox(ctrl, values=["AP", "PE"], textvariable=self.tipo_var, width=4,
-                     state="readonly").pack(side=tk.LEFT, padx=5)
-        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega).pack(side=tk.LEFT, padx=5)
+        cmb_tipo = ttk.Combobox(ctrl, values=["AP", "PE"], textvariable=self.tipo_var,
+                               width=4, state="readonly")
+        cmb_tipo.pack(side=tk.LEFT, padx=5)
+        cmb_tipo.bind("<<ComboboxSelected>>", lambda e: self._carregar_entrega())
 
         ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados).pack(side=tk.RIGHT, padx=5)
         ttk.Button(ctrl, text="Avançar", command=self._avancar).pack(side=tk.RIGHT, padx=5)
@@ -913,18 +914,27 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         tbl_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.sb_y = tk.Scrollbar(tbl_frame, orient="vertical")
         self.sb_y.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree = ttk.Treeview(tbl_frame, columns=("nome", "dt", "tam"), show="headings",
-                                 yscrollcommand=self.sb_y.set)
+        self.tree = ttk.Treeview(
+            tbl_frame,
+            columns=("sel", "nome", "dt", "tam"),
+            show="headings",
+            yscrollcommand=self.sb_y.set,
+        )
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.sb_y.config(command=self.tree.yview)
+        self.tree.heading("sel", text="Sel")
         self.tree.heading("nome", text="Nome do arquivo", anchor="w")
         self.tree.heading("dt", text="Data mod.")
         self.tree.heading("tam", text="Tamanho (KB)")
+        self.tree.column("sel", width=40, anchor="center")
         self.tree.column("nome", width=400, anchor="w")
         self.tree.column("dt", width=130, anchor="center")
         self.tree.column("tam", width=100, anchor="e")
 
         self.tree.bind("<Double-1>", self._iniciar_edicao_nome)
+        self.tree.bind("<Button-1>", self._toggle_checkbox)
+
+        self.checked = {}
 
         if self.lista_inicial:
             self._carregar_lista_inicial()
@@ -957,6 +967,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             self.tree.column("cam_full", width=0, stretch=False)
         self.tree.delete(*self.tree.get_children())
         self.lista_arquivos.clear()
+        self.checked.clear()
 
         pasta = self._folder_mais_recente(self.tipo_var.get())
         if not pasta:
@@ -974,7 +985,8 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             dt_mod = datetime.datetime.fromtimestamp(os.path.getmtime(cam)).strftime("%d/%m/%Y %H:%M")
             rv, _ = self._identificar_rev(f)
             self.lista_arquivos.append((rv, f, os.path.getsize(cam), cam, dt_mod))
-            iid = self.tree.insert("", tk.END, values=(f, dt_mod, tam_kb))
+            iid = self.tree.insert("", tk.END, values=("\u2610", f, dt_mod, tam_kb))
+            self.checked[iid] = False
             # marca para uso posterior (cam path)
             self.tree.set(iid, "cam_full", cam)
     
@@ -990,12 +1002,26 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             self.tree.column("cam_full", width=0, stretch=False)
 
         self.tree.delete(*self.tree.get_children())
+        self.checked.clear()
         for rv, nome, tam, cam, dt in self.lista_inicial:
             iid = self.tree.insert("", tk.END,
-                                values=(nome, dt, tam // 1024))
+                                values=("\u2610", nome, dt, tam // 1024))
             self.tree.set(iid, "cam_full", cam)
-            # mantém lista interna sincronizada
+            self.checked[iid] = False
+        # mantém lista interna sincronizada
         self.lista_arquivos = self.lista_inicial.copy()
+
+    def _toggle_checkbox(self, event):
+        iid = self.tree.identify_row(event.y)
+        col = self.tree.identify_column(event.x)
+        if col != "#1" or not iid:
+            return
+        new_state = not self.checked.get(iid, False)
+        self.checked[iid] = new_state
+        vals = list(self.tree.item(iid, "values"))
+        vals[0] = "\u2611" if new_state else "\u2610"
+        self.tree.item(iid, values=vals)
+        return "break"
 
 
     # util simples para pegar revisao do nome (usa regex já presente no código original)
@@ -1010,7 +1036,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         if not iid:
             return
         col = self.tree.identify_column(event.x)
-        if col != "#1":  # só permite editar coluna 'nome'
+        if col != "#2":  # só permite editar coluna 'nome'
             return
         x, y, w, h = self.tree.bbox(iid, col)
         valor_antigo = self.tree.set(iid, "nome")
@@ -1043,14 +1069,16 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
 
     # --------------------------- exclusão ----------------------------
     def _excluir_selecionados(self):
-        sel = self.tree.selection()
-        if not sel:
+        marked = [iid for iid, val in self.checked.items() if val]
+        if not marked:
             return
-        if not messagebox.askyesno("Confirmação", "Tem certeza de que deseja excluir os arquivos selecionados?\n"
-                                                  "Eles serão enviados à lixeira."):
+        if not messagebox.askyesno(
+            "Confirmação",
+            "Tem certeza de que deseja excluir os arquivos selecionados?\nEles serão enviados à lixeira.",
+        ):
             return
         erros = []
-        for iid in sel:
+        for iid in sorted(marked, key=self.tree.index, reverse=True):
             idx = self.tree.index(iid)
             _, nome, _, cam_full, _ = self.lista_arquivos[idx]
             try:
@@ -1061,18 +1089,23 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             except OSError as err:
                 erros.append(str(err))
                 continue
-            # remove da lista e UI
             self.tree.delete(iid)
             self.lista_arquivos.pop(idx)
+            self.checked.pop(iid, None)
         if erros:
-            messagebox.showwarning("Aviso", "Alguns arquivos não puderam ser excluídos:\n" + "\n".join(erros))
+            messagebox.showwarning(
+                "Aviso",
+                "Alguns arquivos não puderam ser excluídos:\n" + "\n".join(erros),
+            )
 
     # --------------------------- navegação ---------------------------
     def _avancar(self):
-        # monta lista no formato esperado pela TelaAdicaoArquivos
         lista_init = []
-        for rv, nome, tam, cam, dt in self.lista_arquivos:
-            lista_init.append((rv, nome, tam, cam, dt))
+        for iid in self.tree.get_children():
+            if self.checked.get(iid):
+                idx = self.tree.index(iid)
+                rv, nome, tam, cam, dt = self.lista_arquivos[idx]
+                lista_init.append((rv, nome, tam, cam, dt))
         self.destroy()
         TelaAdicaoArquivos(lista_inicial=lista_init, pasta_entrega=self.pasta_entregas,
                            numero_projeto=self.projeto_num).mainloop()
