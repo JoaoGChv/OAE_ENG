@@ -1,27 +1,11 @@
-﻿# -*- coding: utf-8 -*-
-"""
-Sistema de gerenciamento de entregas de projetos de engenharia
-==============================================================
-Versão: 2025‑06‑09 (correções de robustez)
-Principais ajustes:
-  • Caminhos de JSON parametrizáveis por variáveis de ambiente
-  • Tratamento de erros de importação (openpyxl) e JSON corrompido
-  • Tokenização aceita separadores "-", "." e "_" (ou outros definidos no JSON)
-  • Regex de revisão aceita 1‑3 dígitos e traço ou sublinhado
-  • Comparação de revisões mais tolerante (até R999)
-  • Detecção de obsoletos simplificada e confiável
-  • Tratamento de FileNotFound/PermissionError durante varredura
-  • Pequenas melhorias de UX e mensagens
-"""
-
+﻿
 from __future__ import annotations
-
-import urllib.parse as _up          # já é stdlib, não quebra nada
-_orig_quote = _up.quote             # guardamos o original
+import urllib.parse as _up   
+      
+_orig_quote = _up.quote             
 
 def _quote_preservando_drive(s: str, safe: str = "/:") -> str:
-    return _orig_quote(s, safe=safe)   # ‘:’ não será escapado
-
+    return _orig_quote(s, safe=safe)   
 _up.quote = _quote_preservando_drive
 
 import datetime
@@ -50,10 +34,10 @@ from utils.planilha_gerador import criar_ou_atualizar_planilha
 # Dependência externa obrigatória ─ openpyxl
 # -----------------------------------------------------
 try:
-    import openpyxl  # noqa: F401 – uso indireto pelo Workbook
+    import openpyxl 
     from openpyxl import Workbook
 except ImportError:
-    tk.Tk().withdraw()  # Garante janela invisível caso tkinter esteja carregado
+    tk.Tk().withdraw() 
     messagebox.showerror(
         "Dependência ausente",
         "O módulo 'openpyxl' não está instalado.\n"
@@ -115,17 +99,16 @@ MESES: Tuple[str, ...] = (
 PASTA_ENTREGA_GLOBAL: str | None = None
 NOMENCLATURA_GLOBAL: Dict | None = None
 NUM_PROJETO_GLOBAL: str | None = None
-GRD_MASTER_NOME = "GRD_ENTREGAS.xlsx"   # arquivo único que receberá todas as colunas
-
+GRD_MASTER_NOME = "GRD_ENTREGAS.xlsx"  
 
 # -----------------------------------------------------
 # >>> INÍCIO INTEGRAÇÃO AP/PE 
 # -----------------------------------------------------
-TIPO_ENTREGA_GLOBAL: str | None = None   # "AP" ou "PE" – definido no modal
+TIPO_ENTREGA_GLOBAL: str | None = None  
 
 def _center(win: tk.Toplevel | tk.Tk, parent: tk.Toplevel | tk.Tk | None = None) -> None:
     """Posiciona win no centro da tela ou do parent."""
-    win.update_idletasks()                         # garante tamanho real
+    win.update_idletasks()                        
     w, h = win.winfo_width(), win.winfo_height()
 
     if parent:
@@ -139,7 +122,15 @@ def _center(win: tk.Toplevel | tk.Tk, parent: tk.Toplevel | tk.Tk | None = None)
     win.geometry(f"{w}x{h}+{x}+{y}")
 
 
-def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk, size: tuple[int, int] = (480, 280)) -> str | None:
+def escolher_tipo_entrega(
+    master: tk.Toplevel | tk.Tk,
+    size: tuple[int, int] = (480, 280)
+) -> str | None:
+    """
+    Abre um Toplevel modal para escolher AP ou PE e retorna
+    "AP", "PE" ou None (se cancelar).
+    A lógica de retorno permanece a mesma; apenas o layout mudou.
+    """
     # ---------------- estado interno ----------------
     escolha = {"val": None}
     selecionado = tk.StringVar(value="AP")   # default
@@ -224,10 +215,6 @@ def criar_pasta_entrega_ap_pe(
     tipo: str,
     arquivos: list[Tuple[str, str, int, str, str]],
 ) -> None:
-    """
-    Replica a lógica de c2: cria subpastas AP/PE, renomeia a anterior
-    p/ -OBSOLETO e copia arquivos aprovados.
-    """
     prefixo = "1.AP - Entrega-" if tipo == "AP" else "2.PE - Entrega-"
     subdir  = "AP" if tipo == "AP" else "PE"
     pasta_base = os.path.join(pasta_entrega_disc, subdir)
@@ -344,7 +331,6 @@ def comparar_revisoes(r1: str, r2: str) -> int:
 # -----------------------------
 DEFAULT_SEPARATORS: set[str] = {"-", ".", "_"}
 
-
 def _obter_separadores_do_json(nomenclatura: Dict | None) -> set[str]:
     seps: set[str] = set()
     if nomenclatura:
@@ -353,7 +339,6 @@ def _obter_separadores_do_json(nomenclatura: Dict | None) -> set[str]:
             if sep and isinstance(sep, str):
                 seps.add(sep)
     return seps or DEFAULT_SEPARATORS
-
 
 def split_including_separators(nome_sem_ext: str, nomenclatura: Dict | None) -> List[str]:
     """Divide nome em tokens mantendo separadores dinâmicos."""
@@ -372,7 +357,6 @@ def split_including_separators(nome_sem_ext: str, nomenclatura: Dict | None) -> 
         tokens.append(nome_sem_ext[i:j])
         i = j
     return tokens
-
 
 # -----------------------------
 # Validação de tokens
@@ -535,19 +519,25 @@ def janela_erro_revisao(arquivos_alterados):
         janela.destroy()
         sys.exit(0)
 
-    tk.Button(janela, text="Confirmar e sair", command=_encerra, width=15, height=2).pack(pady=5)
-    tk.Button(janela, text="Ignorar", command=janela.destroy, width=15, height=2).pack(pady=5)
+    tk.Button(janela, text="Confirmar e sair", command=_encerra).pack(pady=5)
+    tk.Button(janela, text="Ignorar", command=janela.destroy).pack(pady=5)
     janela.grab_set()
     janela.mainloop()
 
 # -----------------------------------------------------
 # UI: Seleção de disciplina dentro do projeto
 # -----------------------------------------------------
+import tkinter as tk
+from tkinter import messagebox
+import os
+
 def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None:
     """
-    Abre <projeto>/3 Desenvolvimento, lista subpastas-disciplina.
-    Ao confirmar devolve o caminho completo da subpasta 1.ENTREGAS
-    da disciplina escolhida.
+    Exibe as subpastas de <projeto>/3 Desenvolvimento em uma grade de cartões.
+    • Ignora '3.0 COMPATIBILIZAÇÃO' e '3.1 PROJETOS EXTERNOS'.
+    • Cada cartão mostra apenas o nome (até 2 linhas), 120×120 px.
+    • Seleção única, clique ou duplo-clique; botão Confirmar mantém-se.
+    Retorna o caminho da subpasta 1.ENTREGAS ou None se cancelar.
     """
     pasta_desenvol = os.path.join(caminho_proj, "3 Desenvolvimento")
     if not os.path.isdir(pasta_desenvol):
@@ -557,40 +547,111 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
         )
         return None
 
+    # ---------- coleta disciplinas válidas ----------
+    ignorar = ("3.0 compatibilização", "3.1 projetos externos")
+    disciplinas = []
+    for nome in sorted(os.listdir(pasta_desenvol)):
+        # Verifica se o nome da pasta começa com algum dos termos a ignorar (case-insensitive)
+        if any(nome.strip().lower().startswith(term) for term in ignorar):
+            continue
+        p = os.path.join(pasta_desenvol, nome)
+        if os.path.isdir(p):
+            disciplinas.append(p)
+
+    if not disciplinas:
+        messagebox.showerror("Erro", "Nenhuma disciplina encontrada.")
+        return None
+
+    # ---------- janela ----------
     root = tk.Tk()
     root.title(f"Projeto {numero_proj} – Selecionar Disciplina")
     root.geometry("700x500")
     root.minsize(700, 400)
 
-    # ---------- coleta disciplinas ----------
-    disciplinas = []
-    for nome in sorted(os.listdir(pasta_desenvol)):
-        p = os.path.join(pasta_desenvol, nome)
-        if os.path.isdir(p):
-            dt = datetime.datetime.fromtimestamp(
-                os.path.getmtime(p)
-            ).strftime("%d/%m/%Y %H:%M")
-            disciplinas.append((nome, dt, p))          # (nome, data, caminho)
+    # --- filtro ----------------------------------------------------
+    tk.Label(root, text="Filtrar disciplina:").pack(anchor="w", padx=10, pady=5)
+    var_filtro = tk.StringVar()
+    entrada    = tk.Entry(root, textvariable=var_filtro)
+    entrada.pack(fill=tk.X, padx=10)
 
-    if not disciplinas:
-        messagebox.showerror("Erro", "Nenhuma disciplina encontrada.")
-        root.destroy()
-        return None
+    # --- Frame principal para o conteúdo (Canvas + Scrollbar) ---
+    # Este frame ocupará o espaço restante entre o filtro e o rodapé
+    main_content_frame = tk.Frame(root)
+    main_content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-    sel = {"path": None}
+    # --- canvas + frame para grade (agora dentro de main_content_frame) --------------------------------
+    canvas = tk.Canvas(main_content_frame, borderwidth=0, highlightthickness=0)
+    vsb    = tk.Scrollbar(main_content_frame, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vsb.set)
+    vsb.pack(side=tk.RIGHT, fill=tk.Y)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    # ---------- callbacks ----------
-    def confirmar():
-        s = tree.selection()
-        if not s:
+    frame = tk.Frame(canvas, bg="#f4f4f4")
+    canvas.create_window((0, 0), window=frame, anchor="nw")
+
+    CARD_W, CARD_H = 120, 120
+    sel = {"widget": None, "path": None}
+
+    # ---------- renderização da grade -----------------------------
+    def _render():
+        # Destrói todos os widgets existentes no frame da grade
+        for w in frame.winfo_children():
+            w.destroy()
+
+        termo = var_filtro.get().lower()
+        # Filtra as disciplinas com base no termo de pesquisa
+        paths = [p for p in disciplinas if termo in os.path.basename(p).lower()]
+        # Calcula o número de colunas baseado na largura do canvas e do cartão
+        cols  = max(1, (canvas.winfo_width() // (CARD_W + 20)))
+
+        for idx, path in enumerate(paths):
+            r, c = divmod(idx, cols) # Calcula a linha e coluna para o cartão
+
+            card = tk.Frame(frame, width=CARD_W, height=CARD_H,
+                             bg="white", highlightthickness=1,
+                             highlightbackground="#c0c0c0", relief="flat")
+            card.grid(row=r, column=c, padx=10, pady=10)
+            card.grid_propagate(False)
+
+            # Nome da disciplina (quebra em duas linhas se precisar)
+            lbl = tk.Label(card,
+                            text=os.path.basename(path),
+                            wraplength=CARD_W-10,
+                            justify="center",
+                            font=("TkDefaultFont", 10))
+            lbl.place(relx=0.5, rely=0.5, anchor="center")
+
+            # --- seleção / eventos ---------------------------------
+            def _select(widget=card, caminho=path):
+                # Desseleciona o cartão anterior, se houver
+                if sel["widget"]:
+                    sel["widget"].config(bg="white",
+                                          highlightbackground="#c0c0c0")
+                # Seleciona o novo cartão
+                widget.config(bg="#dbe9ff",
+                              highlightbackground="#4e9af1")
+                sel["widget"], sel["path"] = widget, caminho
+
+            # Associa eventos de clique e duplo clique ao cartão
+            card.bind("<Button-1>", lambda e, w=card, p=path: _select(w, p))
+            card.bind("<Double-Button-1>",
+                      lambda e, p=path: _confirmar(p))
+
+            # Certifica-se de que o label também reaja aos cliques
+            lbl.bind("<Button-1>", lambda e, w=card, p=path: _select(w, p))
+            lbl.bind("<Double-Button-1>",
+                      lambda e, p=path: _confirmar(p))
+
+    # ---------- confirmação ---------------------------------------
+    def _confirmar(caminho_sel):
+        if not caminho_sel:
+            # Se nenhum caminho foi selecionado, não faz nada
             return
-        iid = s[0]
-        caminho_disc = tree.set(iid, "caminho")
-        # verifica 1.ENTREGAS
         pasta_entregas = None
-        for folder in os.listdir(caminho_disc):
+        # Procura a subpasta '1.ENTREGAS' dentro da disciplina selecionada
+        for folder in os.listdir(caminho_sel):
             if folder.strip().lower().replace(" ", "") == "1.entregas":
-                pasta_entregas = os.path.join(caminho_disc, folder)
+                pasta_entregas = os.path.join(caminho_sel, folder)
                 break
         if not pasta_entregas or not os.path.isdir(pasta_entregas):
             messagebox.showerror(
@@ -598,43 +659,46 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
                 "A subpasta '1.ENTREGAS' não foi encontrada dentro da disciplina."
             )
             return
-        sel["path"] = pasta_entregas
+        nonlocal_result[0] = pasta_entregas
         root.destroy()
 
-    def filtrar(*_):
-        termo = entrada.get().lower()
-        tree.delete(*tree.get_children())
-        for nome, dt, caminho in disciplinas:
-            if termo in nome.lower():
-                tree.insert(
-                    "", tk.END,
-                    values=(nome, dt, caminho)
-                )
+    # ---------- botões -------------------------------------------
+    # Frame para conter os botões no rodapé
+    footer = tk.Frame(root)
+    # Empacotado no final, ele vai ocupar toda a largura abaixo do main_content_frame
+    footer.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
-    # ---------- UI ----------
-    tk.Label(root, text="Filtrar disciplina:").pack(anchor="w", padx=10, pady=5)
-    entrada = tk.Entry(root)
-    entrada.pack(fill=tk.X, padx=10)
-    entrada.bind("<KeyRelease>", filtrar)
-    entrada.bind("<Return>", lambda e: confirmar())
+    # Cria um frame interno para conter os botões
+    # Este frame interno será centralizado horizontalmente dentro do 'footer'
+    button_frame = tk.Frame(footer)
+    # Usa expand=True para que o button_frame ocupe o máximo de largura possível no footer
+    # e anchor='center' para centralizar seus conteúdos.
+    button_frame.pack(expand=True)
 
-    cols = ("nome", "data", "caminho")
-    tree = ttk.Treeview(root, columns=cols, show="headings", height=15)
-    tree.heading("nome", text="Disciplina")
-    tree.heading("data", text="Modificado em")
-    tree.heading("caminho", text="caminho")
-    tree.column("nome", width=250, anchor="w")
-    tree.column("data", width=130, anchor="w")
-    tree.column("caminho", width=0, stretch=False, minwidth=0)   # oculta
+    btn_voltar = tk.Button(button_frame, text="Voltar", width=15,
+                            command=root.destroy)
+    btn_confirmar = tk.Button(button_frame, text="Confirmar", width=15,
+                               command=lambda: _confirmar(sel["path"]))
 
-    tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    # Usa pack com side=tk.LEFT para posicionar os botões lado a lado dentro de button_frame
+    btn_voltar.pack(side=tk.LEFT, padx=10)
+    btn_confirmar.pack(side=tk.LEFT, padx=10)
 
-    for nome, dt, caminho in disciplinas:
-        tree.insert("", tk.END, values=(nome, dt, caminho))
+    # ---------- ligações ------------------------------------------
+    # Renderiza a grade sempre que o texto do filtro muda
+    var_filtro.trace_add("write", lambda *_: _render())
+    # Ajusta a região de rolagem do canvas quando o frame da grade é redimensionado
+    frame.bind("<Configure>",
+               lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    # Renderiza e ajusta a largura do canvas quando ele é redimensionado
+    canvas.bind("<Configure>",
+                lambda e: (_render(), canvas.itemconfig("all",
+                                  width=canvas.winfo_width())))
 
-    tk.Button(root, text="Confirmar", command=confirmar, width=15, height=2).pack(pady=5)
+    nonlocal_result = [None]
+    _render()
     root.mainloop()
-    return sel["path"]
+    return nonlocal_result[0]
 
 # -----------------------------------------------------
 # Movimento de obsoletos
@@ -797,7 +861,7 @@ def janela_selecao_projeto():
     for idx, (n, _, nome_disp) in enumerate(projetos):
         tree.insert("", tk.END, text=str(idx), values=(n, nome_disp))
 
-    tk.Button(root, text="Confirmar", command=confirmar, width=15, height=2).pack(pady=10)
+    tk.Button(root, text="Confirmar", command=confirmar).pack(pady=10)
     root.mainloop()
     return sel["num"], sel["path"]
 
@@ -838,11 +902,11 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         tk.Label(ctrl, text="Visualizar entregas de:").pack(side=tk.LEFT)
         ttk.Combobox(ctrl, values=["AP", "PE"], textvariable=self.tipo_var, width=4,
                      state="readonly").pack(side=tk.LEFT, padx=5)
-        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(ctrl, text="Carregar", command=self._carregar_entrega).pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados, width=15).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(ctrl, text="Avançar", command=self._avancar, width=15).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(ctrl, text="Voltar", command=self._voltar, width=15).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Avançar", command=self._avancar).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Voltar", command=self._voltar).pack(side=tk.RIGHT, padx=5)
 
         # tabela --------------------------------------------------------------
         tbl_frame = tk.Frame(self)
@@ -1015,10 +1079,22 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
 
     def _voltar(self):
         self.destroy()
-        # retorna para seleção de disciplina reabrindo janela anterior
-        # NOTA: simplificação – reiniciamos script mantendo experiência original
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
+
+        # caminho do projeto = três níveis acima de 1.ENTREGAS
+        caminho_proj = os.path.dirname(
+                           os.path.dirname(          #  Disciplina
+                               os.path.dirname(      #  3 Desenvolvimento
+                                   self.pasta_entregas)))  # 1.ENTREGAS
+
+        nova_pasta = janela_selecao_disciplina(self.projeto_num, caminho_proj)
+        if not nova_pasta:            # usuário cancelou
+            return
+
+        TelaVisualizacaoEntregaAnterior(
+            pasta_entregas=nova_pasta,
+            projeto_num=self.projeto_num,
+            disciplina=os.path.basename(os.path.dirname(nova_pasta))
+        ).mainloop()
 
 # -----------------------------------------------------
 # Janela 1: TelaAdicaoArquivos
@@ -1089,13 +1165,13 @@ class TelaAdicaoArquivos(tk.Tk):
         btn_frame = tk.Frame(container)
         btn_frame.pack(fill=tk.X, pady=5)
 
-        tk.Button(btn_frame, text="Adicionar arquivos", command=self.adicionar_arquivos, width=15, height=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Remover arquivos selecionados", command=self.remover_selecionados, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Adicionar arquivos", command=self.adicionar_arquivos).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Remover arquivos selecionados", command=self.remover_selecionados).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(btn_frame, text="Visualizar tudo", command=self.ativar_visualizar_tudo, width=15, height=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Agrupar por tipo", command=self.ativar_agrupado, width=15, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Visualizar tudo", command=self.ativar_visualizar_tudo).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Agrupar por tipo", command=self.ativar_agrupado).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(btn_frame, text="Analisar", width=18, command=self.proxima_janela_nomenclatura, height=2).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Analisar", width=18, command=self.proxima_janela_nomenclatura).pack(side=tk.RIGHT, padx=5)
 
         self.canvas_global = tk.Canvas(content)
         self.canvas_global.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1115,11 +1191,11 @@ class TelaAdicaoArquivos(tk.Tk):
         # ancorado no rodapé:
         bottom.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 10))
 
-        tk.Button(bottom, text="Cancelar", width=15,
-                  command=self._cancelar, height=2).pack(side=tk.LEFT, padx=5)
+        tk.Button(bottom, text="Cancelar",
+                  command=self._cancelar).pack(side=tk.LEFT, padx=5)
 
-        tk.Button(bottom, text="Voltar", width=15,
-                  command=self._voltar, height=2).pack(side=tk.RIGHT, padx=5)
+        tk.Button(bottom, text="Voltar",
+                  command=self._voltar).pack(side=tk.RIGHT, padx=5)
 
         self.arquivos_por_grupo = {}
 
@@ -1467,9 +1543,9 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         frm_botoes = tk.Frame(container)
         frm_botoes.pack(fill=tk.X, pady=5)
 
-        tk.Button(frm_botoes, text="Mostrar Padrão", command=self.mostrar_nomenclatura_padrao, width=15, height=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(frm_botoes, text="Voltar", command=self.voltar, width=15, height=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(frm_botoes, text="Avançar", command=self.avancar, width=15, height=2).pack(side=tk.RIGHT, padx=5)
+        tk.Button(frm_botoes, text="Mostrar Padrão", command=self.mostrar_nomenclatura_padrao).pack(side=tk.LEFT, padx=5)
+        tk.Button(frm_botoes, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
+        tk.Button(frm_botoes, text="Avançar", command=self.avancar).pack(side=tk.RIGHT, padx=5)
 
         # Cria Treeview
         frame_tv = tk.Frame(container)
@@ -1697,9 +1773,9 @@ class TelaVerificacaoRevisao(tk.Tk):
         btn_frame = tk.Frame(container)
         btn_frame.pack(fill=tk.X, pady=5)
 
-        tk.Button(btn_frame, text="Voltar", command=self.voltar, width=15, height=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Confirmar", command=self.confirmar, width=15, height=2).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_frame, text="Cancelar", command=lambda: (self.destroy(), sys.exit(0)), width=12, height=2).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Confirmar", command=self.confirmar).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_frame, text="Cancelar", command=lambda: (self.destroy(), sys.exit(0))).pack(side=tk.RIGHT, padx=5)
 
     def criar_tabela(self, parent, titulo, arr):
         lf = tk.LabelFrame(parent, text=titulo, font=("Arial", 11, "bold"))
