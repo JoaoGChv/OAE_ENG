@@ -139,14 +139,14 @@ def _center(win: tk.Toplevel | tk.Tk, parent: tk.Toplevel | tk.Tk | None = None)
     win.geometry(f"{w}x{h}+{x}+{y}")
 
 
-def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk,  size: tuple[int, int] = (480, 280)) -> str | None:
-    """
-    Abre um Toplevel modal e retorna "AP", "PE" ou None (cancelado).
-    """
+def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk, size: tuple[int, int] = (480, 280)) -> str | None:
+    # ---------------- estado interno ----------------
     escolha = {"val": None}
+    selecionado = tk.StringVar(value="AP")   # default
 
+    # ---------------- janela ------------------------
     win = tk.Toplevel(master)
-    win.withdraw()                    # evita mostrar fora do lugar
+    win.withdraw()
     win.title("Tipo de Entrega")
     win.transient(master)
     win.grab_set()
@@ -157,29 +157,67 @@ def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk,  size: tuple[int, int] = 
         win,
         text="Escolha o tipo de entrega:",
         font=("Arial", 11, "bold")
-    ).pack(pady=(12, 6), anchor="w", padx=20)
+    ).pack(pady=(12, 12))
 
-    var = tk.StringVar(value="AP")
-    frm = ttk.Frame(win); frm.pack(padx=20, pady=5, anchor="c")
-    ttk.Radiobutton(frm, text="Anteprojeto – 1.AP", value="AP", variable=var).pack(anchor="c")
-    ttk.Radiobutton(frm, text="Projeto Executivo – 2.PE", value="PE", variable=var).pack(anchor="c")
+    # ---------------- área dos cartões --------------
+    area = tk.Frame(win); area.pack(expand=True)
 
-    # ---- botões ----
-    def _ok():
-        escolha["val"] = var.get()
-        win.destroy()
+    CARD_W = (size[0] // 2) - 40      # margens laterais
+    CARD_H = size[1] - 120            # deixa espaço p/ label & btns
+    FONT_BIG = ("Arial", 28, "bold")
 
-    def _cancel():
-        win.destroy()
+    def _build_card(parent, texto, valor):
+        """Cria e devolve um frame-botão."""
+        frame = tk.Frame(parent, width=CARD_W, height=CARD_H,
+                         borderwidth=2, relief="ridge", bg="#f0f0f0")
+        frame.pack_propagate(False)
 
-    btn_box = ttk.Frame(win); btn_box.pack(pady=(8, 12))
-    ttk.Button(btn_box, text="OK", command=_ok, width=15).pack(side="left", padx=6)
-    ttk.Button(btn_box, text="Cancelar", command=_cancel, width=15).pack(side="left", padx=6)
+        lbl_icon = tk.Label(frame, text=valor, font=FONT_BIG, bg="#f0f0f0")
+        lbl_icon.pack(expand=True)
 
-    _center(win, master)             # posição final
-    win.deiconify()                  # exibe já centralizado
+        lbl_txt = tk.Label(frame, text=texto, font=("Arial", 10),
+                           bg="#f0f0f0")
+        lbl_txt.pack(pady=(0, 6))
+
+        def _on_click(*_):
+            selecionado.set(valor)
+            _update_highlight()
+
+        frame.bind("<Button-1>", _on_click)
+        lbl_icon.bind("<Button-1>", _on_click)
+        lbl_txt.bind("<Button-1>", _on_click)
+        return frame
+
+    def _update_highlight():
+        for card, val in ((card_ap, "AP"), (card_pe, "PE")):
+            if selecionado.get() == val:
+                card.config(bg="#dbe9ff", highlightbackground="#4e9af1")
+            else:
+                card.config(bg="#f0f0f0", highlightbackground="#d0d0d0")
+
+    # cria cartões lado a lado
+    card_ap = _build_card(area, "Anteprojeto – 1.AP", "AP")
+    card_pe = _build_card(area, "Projeto Executivo – 2.PE", "PE")
+    card_ap.pack(side="left", padx=10, pady=5, expand=True, fill="both")
+    card_pe.pack(side="left", padx=10, pady=5, expand=True, fill="both")
+    _update_highlight()
+
+    # ---------------- botões OK / Cancelar ----------
+    btn_box = ttk.Frame(win); btn_box.pack(pady=(6, 12))
+    ttk.Button(btn_box, text="OK",
+               command=lambda: (escolha.update(val=selecionado.get()),
+                                win.destroy())
+               ).pack(side="left", padx=6)
+    ttk.Button(btn_box, text="Cancelar",
+               command=win.destroy
+               ).pack(side="left", padx=6)
+
+    # ---------------- final -------------------------
+    _center(win, master)
+    win.deiconify()
     master.wait_window(win)
     return escolha["val"]
+
 
 def criar_pasta_entrega_ap_pe(
     pasta_entrega_disc: str,
