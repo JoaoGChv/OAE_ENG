@@ -969,23 +969,39 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         self.lista_arquivos.clear()
         self.checked.clear()
 
-        pasta = self._folder_mais_recente(self.tipo_var.get())
-        if not pasta:
-            messagebox.showinfo("Info",
-                                "Nenhuma entrega foi encontrada na pasta selecionada. "
-                                "Essa pode ser a primeira entrega. Você pode continuar normalmente "
-                                "para adicionar os arquivos.")
+        # --- reúne arquivos de todas as pastas de entrega (AP ou PE) ---
+        todos_root = listar_arquivos_no_diretorio(self.pasta_entregas)
+        tipo = self.tipo_var.get()
+
+        # filtra apenas os do tipo selecionado (AP/PE);
+        # isso cobre cenários antigos em que os diretórios ainda não
+        # estavam organizados em subpastas AP/PE
+        todos = []
+        for rv, nome, tam, cam, dt_mod in todos_root:
+            caminho_norm = cam.replace("\\", "/").lower()
+            if f"/{tipo.lower()}/" in caminho_norm:
+                todos.append((rv, nome, tam, cam, dt_mod))
+            else:
+                pai = os.path.basename(os.path.dirname(cam)).lower()
+                if tipo == "AP" and pai.startswith("1.ap"):
+                    todos.append((rv, nome, tam, cam, dt_mod))
+                elif tipo == "PE" and pai.startswith("2.pe"):
+                    todos.append((rv, nome, tam, cam, dt_mod))
+
+        if not todos:
+            messagebox.showinfo(
+                "Info",
+                "Nenhum arquivo válido foi encontrado nas pastas de entrega."
+            )
             return
 
-        for f in os.listdir(pasta):
-            cam = os.path.join(pasta, f)
-            if not os.path.isfile(cam):
-                continue
-            tam_kb = os.path.getsize(cam) // 1024
-            dt_mod = datetime.datetime.fromtimestamp(os.path.getmtime(cam)).strftime("%d/%m/%Y %H:%M")
-            rv, _ = self._identificar_rev(f)
-            self.lista_arquivos.append((rv, f, os.path.getsize(cam), cam, dt_mod))
-            iid = self.tree.insert("", tk.END, values=("\u2610", f, dt_mod, tam_kb))
+        obsoletos = set(identificar_obsoletos_custom(todos))
+        validos = [t for t in todos if t not in obsoletos]
+
+        for rv, nome, tam, cam, dt_mod in sorted(validos, key=lambda x: x[1].lower()):
+            tam_kb = tam // 1024
+            self.lista_arquivos.append((rv, nome, tam, cam, dt_mod))
+            iid = self.tree.insert("", tk.END, values=("\u2610", nome, dt_mod, tam_kb))
             self.checked[iid] = False
             # marca para uso posterior (cam path)
             self.tree.set(iid, "cam_full", cam)
