@@ -1,13 +1,5 @@
 ﻿
 from __future__ import annotations
-import urllib.parse as _up   
-      
-_orig_quote = _up.quote             
-
-def _quote_preservando_drive(s: str, safe: str = "/:") -> str:
-    return _orig_quote(s, safe=safe)   
-_up.quote = _quote_preservando_drive
-
 import datetime
 import json
 import os
@@ -15,7 +7,6 @@ import re
 import shutil
 import sys
 import tkinter as tk
-import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Sequence, Tuple
 from utils.planilha_gerador import criar_ou_atualizar_planilha
@@ -71,30 +62,11 @@ ARQ_ULTIMO_DIR: str = _resolve_json_path(
 # Variáveis e Constantes
 # -----------------------------------------------------
 GRUPOS_EXT: Dict[str, Sequence[str]] = {
-    "DWG/DXF": [".dwg", ".dxf"],
-    "DOC/DOCX": [".doc", ".docx"],
-    "XLS/XLSX": [".xls", ".xlsx"],
-    "ZIP/RAR": [".zip", ".rar", ".7z"],
-    "RVT": [".rvt"],
-    "IFC": [".ifc"],
-    "NWC": [".nwc"],
-    "NWD": [".nwd"],
-}
+    "DWG/DXF": [".dwg", ".dxf"], "DOC/DOCX": [".doc", ".docx"],
+    "XLS/XLSX": [".xls", ".xlsx"], "ZIP/RAR": [".zip", ".rar", ".7z"],
+    "RVT": [".rvt"], "IFC": [".ifc"], "NWC": [".nwc"], "NWD": [".nwd"],}
 
-MESES: Tuple[str, ...] = (
-    "janeiro",
-    "fevereiro",
-    "março",
-    "abril",
-    "maio",
-    "junho",
-    "julho",
-    "agosto",
-    "setembro",
-    "outubro",
-    "novembro",
-    "dezembro",
-)
+MESES = ("janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro")
 
 PASTA_ENTREGA_GLOBAL: str | None = None
 NOMENCLATURA_GLOBAL: Dict | None = None
@@ -329,7 +301,7 @@ def comparar_revisoes(r1: str, r2: str) -> int:
 # -----------------------------
 # Tokenização de nomes
 # -----------------------------
-DEFAULT_SEPARATORS: set[str] = {"-", ".", "_"}
+DEFAULT_SEPARATORS: set[str] = {"-", "."}
 
 def _obter_separadores_do_json(nomenclatura: Dict | None) -> set[str]:
     seps: set[str] = set()
@@ -477,34 +449,6 @@ def gerar_nomes_entrega(num_entrega: int):
             f"ENTREGA.{num_entrega:02d}-{data_atual}",
             data_atual)
 
-
-def abrir_gmail_no_chrome(emails: Sequence[str], assunto: str, corpo: str):
-    to_param = ",".join(emails)
-    su = assunto.replace(" ", "+")
-    body = corpo.replace(" ", "+")
-    url = f"https://mail.google.com/mail/?view=cm&fs=1&to={to_param}&su={su}&body={body}"
-    try:
-        webbrowser.open(url)
-    except webbrowser.Error:
-        # Fallback para mailto
-        os.startfile(f"mailto:{to_param}?subject={su}&body={body}")
-
-
-def montar_corpo_email(arquivos_novos, arquivos_revisados, obsoletos):
-    def _linhas(arr):
-        return "\n".join(
-            f"- {a} (Rev: {rv or 'Sem Revisão'}, Modificado em: {dmod})" for rv, a, _, _, dmod in arr
-        ) or "Nenhum"
-
-    corpo = (
-        "Segue a GRD da entrega oficial.\n\n"
-        f"Acrescentados:\n{_linhas(arquivos_novos)}\n\n"
-        f"Revisados:\n{_linhas(arquivos_revisados)}\n\n"
-        f"Removidos (Obsoletos):\n{_linhas(obsoletos)}\n\n"
-    )
-    return corpo
-
-
 def janela_erro_revisao(arquivos_alterados):
     janela = tk.Toplevel()
     janela.title("Possível Erro de Revisão")
@@ -526,10 +470,6 @@ def janela_erro_revisao(arquivos_alterados):
 
 # -----------------------------------------------------
 # UI: Seleção de disciplina dentro do projeto
-# -----------------------------------------------------
-import tkinter as tk
-from tkinter import messagebox
-import os
 
 def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None:
     """
@@ -757,7 +697,6 @@ def mover_obsoletos_e_grd_anterior(obsoletos, diretorio: str, num_entrega_atual:
             tentar_novamente_operacao(shutil.move, cam, destino)
 
         except FileNotFoundError:
-            # já não existe – ignora
             continue
 
 
@@ -952,7 +891,6 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         for d in os.listdir(pasta_tipo):
             if d.endswith("-OBSOLETO"):
                 continue
-            # pattern "X.AP - Entrega-Y" ou "X.PE - Entrega-Y"
             m = re.search(r"Entrega-(\d+)$", d)
             if m:
                 candidatas.append((int(m.group(1)), d))
@@ -969,13 +907,9 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         self.lista_arquivos.clear()
         self.checked.clear()
 
-        # --- reúne arquivos de todas as pastas de entrega (AP ou PE) ---
         todos_root = listar_arquivos_no_diretorio(self.pasta_entregas)
         tipo = self.tipo_var.get()
 
-        # filtra apenas os do tipo selecionado (AP/PE);
-        # isso cobre cenários antigos em que os diretórios ainda não
-        # estavam organizados em subpastas AP/PE
         todos = []
         for rv, nome, tam, cam, dt_mod in todos_root:
             caminho_norm = cam.replace("\\", "/").lower()
@@ -1005,9 +939,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             self.checked[iid] = False
             # marca para uso posterior (cam path)
             self.tree.set(iid, "cam_full", cam)
-    
-    # ------------------------------------------------------------------
-    # ### NOVO ###
+
     def _carregar_lista_inicial(self):
         """Preenche a Treeview usando self.lista_inicial recebida do botão Voltar."""
         if not self.lista_inicial:
@@ -1269,9 +1201,6 @@ class TelaAdicaoArquivos(tk.Tk):
         if pasta_entrega and (not lista_inicial):
             self._abrir_filedialog_inicial(pasta_entrega)
 
-    # --------------------------------------------------
-    # NOVO – abre o diálogo já na 1.ENTREGAS
-    # --------------------------------------------------
     def _abrir_filedialog_inicial(self, pasta_entrega):
         init_dir = carregar_ultimo_diretorio()
         if not init_dir or not os.path.exists(init_dir):
@@ -1329,7 +1258,6 @@ class TelaAdicaoArquivos(tk.Tk):
 
         self.destroy()
 
-        from gerenciar_entregas import TelaVisualizacaoEntregaAnterior
         TelaVisualizacaoEntregaAnterior(
             pasta_entregas=self.pasta_entrega,
             projeto_num=self.numero_projeto,
@@ -1573,13 +1501,22 @@ class TelaAdicaoArquivos(tk.Tk):
 # Janela 2: TelaVerificacaoNomenclatura
 # -----------------------------------------------------
 class TelaVerificacaoNomenclatura(tk.Tk):
-    """
-    Janela intermediária: exibe cada arquivo, separando tokens
-    em colunas (campo ou separador). Marca cada célula com mismatch
-    (vermelho) ou missing (amarelo) se estiver ausente ou incorreta.
-    """
     def __init__(self, lista_arquivos, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        global NOMENCLATURA_GLOBAL, NUM_PROJETO_GLOBAL
+        if NUM_PROJETO_GLOBAL:
+            NOMENCLATURA_GLOBAL = carregar_nomenclatura_json(NUM_PROJETO_GLOBAL)
+        self.lista_arquivos = lista_arquivos.copy()  # ← evitar referência residual
+
+        self._token_map = {}
+        self._tags_map  = {}
+        for rv, arq, tam, path, dmod in self.lista_arquivos:
+            nome_sem_ext, _ = os.path.splitext(arq)
+            tokens = split_including_separators(nome_sem_ext, NOMENCLATURA_GLOBAL)
+            tags   = verificar_tokens(tokens, NOMENCLATURA_GLOBAL)
+            self._token_map[arq] = tokens
+            self._tags_map[arq]  = tags
+
         self.title("Verificação de Nomenclatura")
         self.resizable(True, True)
         self.lista_arquivos = lista_arquivos
@@ -1648,8 +1585,10 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         for (rv, arq, tam, path, dmod) in self.lista_arquivos:
             nome_sem_ext, _ = os.path.splitext(arq)
             tokens = split_including_separators(nome_sem_ext, NOMENCLATURA_GLOBAL)
-            # Verificar
             tags_result = verificar_tokens(tokens, NOMENCLATURA_GLOBAL)
+            # usa sempre o que foi pré-computado
+            tokens      = self._token_map[arq]
+            tags_result = self._tags_map[arq]
             
             # Montamos a row com length = self.max_tokens
             row_vals = []
@@ -1755,11 +1694,14 @@ class TelaVerificacaoNomenclatura(tk.Tk):
     def voltar(self):
         self.destroy()
         # Reabrir a janela 1, repassando self.lista_arquivos
-        TelaAdicaoArquivos(lista_inicial=self.lista_arquivos).mainloop()
+        TelaAdicaoArquivos(
+            lista_inicial=self.lista_arquivos,
+            pasta_entrega=PASTA_ENTREGA_GLOBAL,
+            numero_projeto=NUM_PROJETO_GLOBAL
+        ).mainloop()
 
     def avancar(self):
         global TIPO_ENTREGA_GLOBAL
-        # Validação de tokens
         for iid in self.tree.get_children():
             tags_ = self.tree.item(iid, "tags")
             if "mismatch" in tags_ or "missing" in tags_:
@@ -1775,41 +1717,29 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         if escolha is None:        # usuário cancelou
             return
         TIPO_ENTREGA_GLOBAL = escolha
-
-        # Prossegue para Tela 3
         self.destroy()
         TelaVerificacaoRevisao(self.lista_arquivos).mainloop()
-
 
 # -----------------------------------------------------
 # Janela 3: TelaVerificacaoRevisao
 # -----------------------------------------------------
 class TelaVerificacaoRevisao(tk.Tk):
-    """
-    Última janela: exibe arquivos novos, revisados, alterados.
-    Permite confirmar a entrega ou voltar (reabrir a janela 2).
-    Ao confirmar, executa o pos_processamento.
-    """
     def __init__(self, lista_arquivos, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("Verificação de Revisão")
         self.resizable(True, True)
         self.lista_arquivos = lista_arquivos
         self.geometry("800x600")
-
         self.diretorio = PASTA_ENTREGA_GLOBAL
         self.dados_anteriores = carregar_dados_anteriores(self.diretorio)
         self.primeira_entrega = (len(self.dados_anteriores) == 0)
-
         (self.arquivos_novos,
          self.arquivos_revisados,
          self.arquivos_alterados) = analisar_comparando_estado(self.lista_arquivos, self.dados_anteriores)
         todos_diretorio = listar_arquivos_no_diretorio(self.diretorio)
         self.obsoletos = identificar_obsoletos_custom(todos_diretorio)
-
         container = tk.Frame(self)
         container.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
         if self.primeira_entrega:
             info_text = "Essa é a primeira análise. Esses foram os arquivos:"
         else:
@@ -1817,13 +1747,10 @@ class TelaVerificacaoRevisao(tk.Tk):
             info_text = f"Esses foram os arquivos analisados a partir da última entrega, {info}."
         lbl = tk.Label(container, text=info_text, font=("Arial", 12, "bold"))
         lbl.pack(pady=5)
-
         self.criar_tabela(container, "Arquivos novos", self.arquivos_novos)
         self.criar_tabela(container, "Arquivos revisados", self.arquivos_revisados)
-
         btn_frame = tk.Frame(container)
         btn_frame.pack(fill=tk.X, pady=5)
-
         tk.Button(btn_frame, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Confirmar", command=self.confirmar).pack(side=tk.RIGHT, padx=5)
         tk.Button(btn_frame, text="Cancelar", command=lambda: (self.destroy(), sys.exit(0))).pack(side=tk.RIGHT, padx=5)
@@ -1831,29 +1758,22 @@ class TelaVerificacaoRevisao(tk.Tk):
     def criar_tabela(self, parent, titulo, arr):
         lf = tk.LabelFrame(parent, text=titulo, font=("Arial", 11, "bold"))
         lf.pack(fill=tk.BOTH, expand=True, pady=5)
-
         scrollbar_local = tk.Scrollbar(lf, orient="vertical", width=20)
         scrollbar_local.pack(side=tk.RIGHT, fill=tk.Y)
-
         cols = ("Nome do arquivo","Revisão","Data de modificação")
         tree = ttk.Treeview(lf, columns=cols, show="headings", height=5, yscrollcommand=scrollbar_local.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         scrollbar_local.config(command=tree.yview)
-
         style = ttk.Style()
         style.configure("Treeview", rowheight=24)
-
         for c in cols:
             tree.heading(c, text=c)
             tree.column(c, width=200, anchor='w', stretch=True)
-
         if not arr:
             tree.insert("", tk.END, values=("Nenhum","",""))
         else:
             for (rv,a,tam,cam,dmod) in arr:
                 tree.insert("", tk.END, values=(a, rv if rv else "Sem Revisão", dmod))
-
         return tree
 
     def voltar(self):
@@ -1862,19 +1782,16 @@ class TelaVerificacaoRevisao(tk.Tk):
 
     def confirmar(self):
         global TIPO_ENTREGA_GLOBAL
-
         if self.arquivos_alterados:
             self.withdraw()
             janela_erro_revisao(self.arquivos_alterados)
             self.deiconify()
-
         if not messagebox.askyesno("Confirmação Final", "Confirma que estes arquivos estão corretos?"):
             self.destroy()
             sys.exit(0)
         if not messagebox.askyesno("Entrega Oficial", "Essa é uma entrega oficial?"):
             self.destroy()
             sys.exit(0)
-
         try:
             if TIPO_ENTREGA_GLOBAL:
                 criar_pasta_entrega_ap_pe(
@@ -1882,19 +1799,12 @@ class TelaVerificacaoRevisao(tk.Tk):
                     TIPO_ENTREGA_GLOBAL,
                     self.arquivos_novos + self.arquivos_revisados + self.arquivos_alterados
                 )
-
-            # ------------------------------------------------------------------
-            # NOVO ▸ garante que todos os caminhos usados na planilha apontem
-            #       para a pasta de entrega recém-criada (…/AP|PE/Entrega-N)
-            # ------------------------------------------------------------------
             subdir = "AP" if TIPO_ENTREGA_GLOBAL == "AP" else "PE"
             pasta_base = os.path.join(self.diretorio, subdir)
-
             entregas_ativas = [
                     d for d in os.listdir(pasta_base)
                     if d.startswith(("1.AP - Entrega-", "2.PE - Entrega-"))
                     and not d.endswith("-OBSOLETO")]
-            
             if entregas_ativas:                         
                 pasta_destino = os.path.join(
                     pasta_base,
@@ -1906,20 +1816,15 @@ class TelaVerificacaoRevisao(tk.Tk):
                     for i, tup in enumerate(list(lista)):
                         nome = os.path.basename(tup[3])
                         lista[i] = tup[:3] + (os.path.join(pasta_destino, nome),) + tup[4:]
-
                 _redir(self.arquivos_novos)
                 _redir(self.arquivos_revisados)
                 _redir(self.arquivos_alterados)
-            # ------------------------------------------------------------------
 
         except Exception as e:
             messagebox.showerror(
                 "Erro",
                 f"Falha ao criar/copiar pasta de entrega AP/PE:\n{e}"
             )
-
-        # ----------------------------------------------
-        # 1) executa toda a lógica original
         pos_processamento(
             self.primeira_entrega,
             self.diretorio,
@@ -1929,8 +1834,6 @@ class TelaVerificacaoRevisao(tk.Tk):
             self.arquivos_alterados,
             self.obsoletos
         )
-
-        # 2) cria / renomeia pastas AP-/PE-Entrega-NN  (NOVA LÓGICA)
         try:
             if TIPO_ENTREGA_GLOBAL:
                 criar_pasta_entrega_ap_pe(
@@ -1940,12 +1843,8 @@ class TelaVerificacaoRevisao(tk.Tk):
                 )
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao criar pasta de entrega AP/PE:\n{e}")
-
         sys.exit(0)
 
-# -----------------------------------------------------
-# Funções de Análise
-# -----------------------------------------------------
 def listar_arquivos_no_diretorio(diretorio):
     ignorar = {"dados_execucao_anterior.json", GRD_MASTER_NOME}
     for f in os.listdir(diretorio):
@@ -1972,18 +1871,15 @@ def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
         nb, revision, ex = identificar_nome_com_revisao(a)
         key = (nb.lower(), ex.lower())
         grouping.setdefault(key, []).append((rv,a,tam,cam,dmod))
-
     novos = []
     revisados = []
     alterados = []
-
     for key, items in grouping.items():
         items.sort(key=lambda x: comparar_revisoes(x[0], 'R99'))
         ant = dados_anteriores.get(f"{key[0]}|{key[1]}", None)
         rev_ant = ant["revisao"] if ant else ""
         tam_ant = ant["tamanho"] if ant else None
         ts_ant = ant.get("timestamp") if ant else None
-
         if not ant:
             if items:
                 novos.append(items[0])
@@ -2014,18 +1910,14 @@ def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
                         ts_now = os.path.getmtime(camx)
                         if tamx != tam_ant or (ts_ant is not None and ts_now != ts_ant):
                             alterados.append((rvx,arqx,tamx,camx,dmodx))
-
     return (novos, revisados, alterados)
 
 def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_novos, arquivos_revisados, arquivos_alterados, obsoletos):
     num_entrega_atual = dados_anteriores.get("entregas_oficiais", 0) + 1
-
     caminho_excel_master = os.path.join(diretorio, GRD_MASTER_NOME)
-
     if not primeira_entrega:
         if obsoletos or dados_anteriores.get("entregas_oficiais",0) >= 1:
             mover_obsoletos_e_grd_anterior(obsoletos, diretorio, num_entrega_atual)
-
     if primeira_entrega:
         union_ = []
         union_.extend(arquivos_novos)
@@ -2046,8 +1938,6 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
         if not lista_para_planilha:
             messagebox.showinfo("Info", "Nenhum arquivo válido após remoção de obsoletos.")
             sys.exit(0)
-
-    # gera / atualiza a planilha E principal
     criar_ou_atualizar_planilha(
         caminho_excel=caminho_excel_master,
         tipo_entrega=TIPO_ENTREGA_GLOBAL or "AP",
@@ -2056,17 +1946,14 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
         arquivos=lista_para_planilha,
         estado_anterior=dados_anteriores,
     )
-
     dados_anteriores["ultima_execucao"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     dados_anteriores["entregas_oficiais"] = num_entrega_atual
-
     grouping_final = {}
     all_files_now = listar_arquivos_no_diretorio(diretorio)
     for rv,a,tam,cam,dmod in all_files_now:
         nb, rev, ex = identificar_nome_com_revisao(a)
         key = (nb.lower(), ex.lower())
         grouping_final.setdefault(key, []).append((rv,a,tam,cam,dmod))
-
     for key, arr in grouping_final.items():
         arr.sort(key=lambda x: comparar_revisoes(x[0], 'R99'))
         revf = arr[-1][0]
@@ -2078,38 +1965,28 @@ def pos_processamento(primeira_entrega, diretorio, dados_anteriores, arquivos_no
             "tamanho": tamf,
             "timestamp": tsf,
         }
-
     salvar_dados(diretorio, dados_anteriores)
-
     messagebox.showinfo("Concluído", "Processo concluído com sucesso.")
     sys.exit(0)
 
-
-# -----------------------------------------------------
-# Função Principal
-# -----------------------------------------------------
 def main():
     num_proj, caminho_proj = janela_selecao_projeto()
     if not num_proj or not caminho_proj:
         return
-
     pasta_entrega = janela_selecao_disciplina(num_proj, caminho_proj)
     if not pasta_entrega:
         return   # usuário cancelou ou erro
-
-    # variáveis globais
+    
     global NOMENCLATURA_GLOBAL, PASTA_ENTREGA_GLOBAL, NUM_PROJETO_GLOBAL
     NOMENCLATURA_GLOBAL   = carregar_nomenclatura_json(num_proj)
     PASTA_ENTREGA_GLOBAL  = pasta_entrega
     NUM_PROJETO_GLOBAL    = num_proj
 
-    # ➡️ NOVO PASSO: exibe entrega anterior antes da TelaAdicaoArquivos
     TelaVisualizacaoEntregaAnterior(
         pasta_entregas=pasta_entrega,
         projeto_num=num_proj,
         disciplina=os.path.basename(os.path.dirname(pasta_entrega))
     ).mainloop()
 
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     main()
