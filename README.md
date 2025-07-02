@@ -6,13 +6,26 @@ the spreadsheet generation.
 
 ## Running the Web Server
 
-1. Install dependencies:
+
+1. Create a Venv:
+
+```bash
+python -m venv myvenv
+```
+
+2. Venv Activate:
+
+```bash
+.\myvenv\Scripts\Activate.ps1
+```
+
+3. Install dependencies:
 
 ```bash
 pip install flask openpyxl send2trash
 ```
 
-2. Start the server from the repository root:
+4. Start the server from the repository root:
 
 ```bash
 flask --app web_app.app run
