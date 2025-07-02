@@ -1338,19 +1338,24 @@ class TelaVerificacaoRevisao(tk.Tk):
             pasta_base = os.path.join(self.diretorio, subdir)
             entregas_ativas = [
                     d for d in os.listdir(pasta_base)
-                    if d.startswith(("1.AP - Entrega-", "2.PE - Entrega-"))
-                    and not d.endswith("-OBSOLETO")]
-            if entregas_ativas:                         
+                if d.startswith(("1.AP - Entrega-", "2.PE - Entrega-"))
+                and not d.endswith("-OBSOLETO")
+            ]
+            if entregas_ativas:                       
                 pasta_destino = os.path.join(
                     pasta_base,
-                    max(entregas_ativas,
-                        key=lambda n: int(re.search(r"(\d+)$", n).group(1)))
+                    max(
+                        entregas_ativas,
+                        key=lambda n: int(re.search(r"(\d+)$", n).group(1)),
+                    ),
                 )
 
                 def _redir(lista):
                     for i, tup in enumerate(list(lista)):
                         nome = os.path.basename(tup[3])
-                        lista[i] = tup[:3] + (os.path.join(pasta_destino, nome),) + tup[4:]
+                        lista[i] = tup[:3] + (
+                            os.path.join(pasta_destino, nome),
+                        ) + tup[4:]
                 _redir(self.arquivos_novos)
                 _redir(self.arquivos_revisados)
                 _redir(self.arquivos_alterados)
@@ -1370,15 +1375,6 @@ class TelaVerificacaoRevisao(tk.Tk):
             self.obsoletos,
             TIPO_ENTREGA_GLOBAL,
         )
-        try:
-            if TIPO_ENTREGA_GLOBAL:
-                criar_pasta_entrega_ap_pe(
-                    self.diretorio,
-                    TIPO_ENTREGA_GLOBAL,
-                    self.arquivos_novos + self.arquivos_revisados + self.arquivos_alterados
-                )
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao criar pasta de entrega AP/PE:\n{e}")
         sys.exit(0)
 
 def main():
