@@ -10,7 +10,7 @@ the spreadsheet generation.
 1. Create a Venv:
 
 ```bash
-python -m venv meuvenv
+python -m venv myvenv
 ```
 
 2. Venv Activate:
