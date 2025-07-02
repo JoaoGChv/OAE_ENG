@@ -1,3 +1,28 @@
+# OAE Engineering Tools
+
+This repository includes utilities for managing project deliveries. A simple web
+interface based on Flask can be used to trigger the delivery routines and test
+the spreadsheet generation.
+
+## Running the Web Server
+
+1. Install dependencies:
+
+```bash
+pip install flask openpyxl
+```
+
+2. Start the server from the repository root:
+
+```bash
+FLASK_APP=web_app.app flask run
+```
+
+The application will be available at `http://127.0.0.1:5000/`.
+
+Access the home page and use the provided link to start the delivery process.
+The server will create a dummy spreadsheet in your temporary directory.
+
 # OAE Engineering Delivery Manager
 
 This repository contains tools for managing deliveries and generating Excel spreadsheets.
