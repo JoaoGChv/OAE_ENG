@@ -15,7 +15,7 @@ pip install flask openpyxl
 2. Start the server from the repository root:
 
 ```bash
-FLASK_APP=web_app.app flask run
+flask --app web_app.app run
 ```
 
 The application will be available at `http://127.0.0.1:5000/`.
