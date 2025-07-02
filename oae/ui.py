@@ -1166,12 +1166,7 @@ class TelaVerificacaoNomenclatura(tk.Tk):
                     pass
 
     def mostrar_nomenclatura_padrao(self):
-        """
-        Exibe uma janela com a nomenclatura padrão, cada campo + separador.
-        Ex.: se JSON tem 14 campos => iremos exibir 2*14 -1 colunas, mostrando
-        algo como E - KDD - 467 - OAE ...
-        Se for fixo, listamos valores fixos, se não for fixo, "(livre)".
-        """
+        """Exibe uma janela com a nomenclatura padrão, cada campo + separador."""
         if not NOMENCLATURA_GLOBAL:
             messagebox.showinfo("Info", "Nomenclatura não definida para este projeto.")
             return
@@ -1395,6 +1390,3 @@ def main():
         projeto_num=num_proj,
         disciplina=os.path.basename(os.path.dirname(pasta_entrega))
     ).mainloop()
-
-if __name__ == "__main__":
-    main()

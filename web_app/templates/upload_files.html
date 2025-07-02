@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Upload Files</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+  </style>
+</head>
+<body>
+  <h1>Upload Files</h1>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="files" multiple required>
+    <button type="submit">Process Delivery</button>
+  </form>
+  <p><a href="{{ url_for('select_project') }}">Back</a></p>
+</body>
+</html>

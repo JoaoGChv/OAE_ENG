@@ -10,6 +10,9 @@ from urllib.parse import quote as _q  # para percent-encoding de caracteres não
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Estilo e constantes
@@ -107,11 +110,6 @@ def _to_uri_folder(path: str) -> str:
     # barra final + “#” evita que o Excel modifique o hyperlink
     return "file:///" + encoded + "/?open"
 
-    '''# 5) monta URI **com** barra final
-    uri = "file:///" + encoded + "/#"
-    print("[to_uri]", uri)          # log de depuração
-    return uri
-    '''
 # ---------------------------------------------------------------------------
 # Helper que hidrata links faltantes em colunas antigas
 # ---------------------------------------------------------------------------
@@ -143,8 +141,8 @@ def _hidratar_hyperlinks(ws, linha_titulo: int, dir_base: str) -> None:
             cel = ws.cell(row=row, column=col)
             if cel.value:                              # tem nome de arquivo
                 link = _to_uri_folder(pasta)
-                print(f"[hidratar] row {row} col {col} →", link)   #  ←  log
-                cel.hyperlink = link  
+                logger.debug("[hidratar] row %s col %s → %s", row, col, link)
+                cel.hyperlink = link 
 
 # ---------------------------------------------------------------------------
 # Função principal – lógica original preservada
@@ -222,12 +220,12 @@ def criar_ou_atualizar_planilha(
         # ---------- hyperlink (para a PASTA, barra final garantida) ----------
         folder = info["dir"]
         link = _to_uri_folder(folder)
-        print("[nova-col] linha", row, "|", link)   # ← LOG
+        logger.debug("[nova-col] linha %s | %s", row, link)
         cel.hyperlink = link
     # ---- hidrata colunas antigas ------------------------------------------
     _hidratar_hyperlinks(ws, linha_titulo, diretorio_base)
     wb.save(caminho_excel)
-    print("Planilha atualizada:", caminho_excel)
+    logger.info("Planilha atualizada: %s", caminho_excel)
 
 # ---------------------------------------------------------------------------
 # Helpers

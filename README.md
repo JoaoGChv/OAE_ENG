@@ -9,7 +9,7 @@ the spreadsheet generation.
 1. Install dependencies:
 
 ```bash
-pip install flask openpyxl
+pip install flask openpyxl send2trash
 ```
 
 2. Start the server from the repository root:
@@ -20,8 +20,10 @@ flask --app web_app.app run
 
 The application will be available at `http://127.0.0.1:5000/`.
 
-Access the home page and use the provided link to start the delivery process.
-The server will create a dummy spreadsheet in your temporary directory.
+Access `http://127.0.0.1:5000/` and choose **New Delivery** to select a
+project and upload files. Uploaded files are copied to a new delivery folder and
+a GRD spreadsheet is generated automatically. The demo link still creates a
+dummy spreadsheet in your temporary directory.
 
 # OAE Engineering Delivery Manager
 
