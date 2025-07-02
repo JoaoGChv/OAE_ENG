@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nomenclature Check</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    .mismatch { background: #fdd; }
+    .missing { background: #ffd; }
+  </style>
+</head>
+<body>
+  <h1>Nomenclature Check</h1>
+  {% for nome,tokens in results %}
+  <h3>{{ nome }}</h3>
+  <p>
+    {% for tok,tag in tokens %}
+      <span class="{{ tag }}">{{ tok }}</span>
+    {% endfor %}
+  </p>
+  {% endfor %}
+  <p><a href="{{ url_for('index') }}">Back</a></p>
+</body>
+</html>

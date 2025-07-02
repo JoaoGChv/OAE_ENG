@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Delivery History</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>Previous Delivery ({{ tipo }})</h1>
+  {% if files %}
+  <table>
+    <tr><th>File</th><th>Date</th><th>Size KB</th></tr>
+    {% for rv,nome,tam,cam,dt in files %}
+    <tr>
+      <td>{{ nome }}</td>
+      <td>{{ dt }}</td>
+      <td>{{ tam // 1024 }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>No files found.</p>
+  {% endif %}
+  <p><a href="{{ url_for('index') }}">Back</a></p>
+</body>
+</html>

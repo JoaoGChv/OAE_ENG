@@ -38,6 +38,13 @@ project and upload files. Uploaded files are copied to a new delivery folder and
 a GRD spreadsheet is generated automatically. The demo link still creates a
 dummy spreadsheet in your temporary directory.
 
+Additional pages:
+
+- `/history?folder=<ENTREGAS_PATH>&tipo=AP` – view the most recent delivery
+  files for a discipline.
+- `/nomenclature?folder=<PASTA>&num=<PROJETO>` – check naming tokens of files
+  using the JSON nomenclature rules.
+
 # OAE Engineering Delivery Manager
 
 This repository contains tools for managing deliveries and generating Excel spreadsheets.
