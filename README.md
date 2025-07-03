@@ -107,7 +107,24 @@ ARQ_ULTIMO_DIR = _resolve_json_path(
     r"G:\Drives compartilhados\OAE-JSONS\ultimo_diretorio_arqs.json",
 )
 ```
+## Gerando Executável (.exe)
 
+1. Instale o PyInstaller:
+
+```bash
+pip install pyinstaller
+```
+
+2. Execute o comando abaixo para gerar o executável:
+
+```bash
+pyinstaller --onefile --windowed gerenciar_entregas.py
+```
+
+O executável será criado no diretório `dist/`.
+
+Certifique-se de instalar previamente todas as dependências listadas em
+`requirements.txt` para que a criação do executável ocorra sem erros.
 ## Usage
 
 Run the application with Python:
