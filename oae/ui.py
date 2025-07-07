@@ -212,7 +212,7 @@ def janela_erro_revisao(arquivos_alterados):
     janela.mainloop()
 
 
-def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None:
+def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> tuple[str | None, bool]:
     """Exibe a lista de disciplinas em cartões para seleção."""
     pasta_desenvol = os.path.join(caminho_proj, "3 Desenvolvimento")
     if not os.path.isdir(pasta_desenvol):
@@ -257,8 +257,25 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
     frame = tk.Frame(canvas, bg="#f4f4f4")
     canvas.create_window((0, 0), window=frame, anchor="nw")
 
+    def _on_mousewheel(event):
+        if event.num == 4 or event.delta > 0:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            canvas.yview_scroll(1, "units")
+
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    canvas.bind_all("<Button-4>", _on_mousewheel)
+    canvas.bind_all("<Button-5>", _on_mousewheel)
+
+    def _unbind_wheel():
+        canvas.unbind_all("<MouseWheel>")
+        canvas.unbind_all("<Button-4>")
+        canvas.unbind_all("<Button-5>")
+
     CARD_W, CARD_H = 120, 120
     sel = {"widget": None, "path": None}
+    voltar_flag = {"val": False}
+
 
     def _render():
         for w in frame.winfo_children():
@@ -317,6 +334,7 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
             )
             return
         nonlocal_result[0] = pasta_entregas
+        _unbind_wheel()
         root.destroy()
 
     footer = tk.Frame(root)
@@ -324,7 +342,12 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
     button_frame = tk.Frame(footer)
     button_frame.pack(expand=True)
 
-    btn_voltar = tk.Button(button_frame, text="Voltar", width=15, command=root.destroy)
+    btn_voltar = tk.Button(
+        button_frame,
+        text="Voltar",
+        width=15,
+        command=lambda: (voltar_flag.update(val=True), root.destroy()),
+    )
     btn_confirmar = tk.Button(
         button_frame,
         text="Confirmar",
@@ -344,7 +367,7 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> str | None
     nonlocal_result = [None]
     _render()
     root.mainloop()
-    return nonlocal_result[0]
+    return nonlocal_result[0], voltar_flag["val"]
 
 class TelaVisualizacaoEntregaAnterior(tk.Tk):
     """Mostra arquivos da entrega AP/PE mais recente e permite renomear/excluir."""
@@ -359,7 +382,8 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         self.pasta_entregas = pasta_entregas  # caminho para 1.ENTREGAS
         self.projeto_num = projeto_num
         self.disciplina = disciplina
-        self.lista_inicial = lista_inicial 
+        self.lista_inicial = lista_inicial
+        self.reabrir_disciplina = False
 
         # ------ estado ------
         self.tipo_var = tk.StringVar(value="AP")  # AP ou PE selecionado para visualização
@@ -564,9 +588,13 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         for iid in sorted(marked, key=self.tree.index, reverse=True):
             idx = self.tree.index(iid)
             _, nome, _, cam_full, _ = self.lista_arquivos[idx]
+            cam_full = os.path.normpath(cam_full)
             try:
                 if send2trash:
-                    send2trash(cam_full)
+                    try:
+                        send2trash(cam_full)
+                    except OSError:
+                        os.remove(cam_full)
                 else:
                     os.remove(cam_full)
             except OSError as err:
@@ -594,18 +622,23 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
                            numero_projeto=self.projeto_num).mainloop()
 
     def _voltar(self):
-        self.destroy()
-
         # caminho do projeto = três níveis acima de 1.ENTREGAS
         caminho_proj = os.path.dirname(
-                           os.path.dirname(          #  Disciplina
-                               os.path.dirname(      #  3 Desenvolvimento
-                                   self.pasta_entregas)))  # 1.ENTREGAS
+            os.path.dirname(          #  Disciplina
+                os.path.dirname(      #  3 Desenvolvimento
+                    self.pasta_entregas)))  # 1.ENTREGAS
 
+        # esconde a janela atual temporariamente
+        self.withdraw()
         nova_pasta = janela_selecao_disciplina(self.projeto_num, caminho_proj)
-        if not nova_pasta:            # usuário cancelou
+
+        if not nova_pasta:  # usuário cancelou
+            # reexibe a janela atual
+            self.deiconify()
             return
 
+        # seleção válida: fecha a atual e abre novamente com a nova pasta
+        self.destroy()
         TelaVisualizacaoEntregaAnterior(
             pasta_entregas=nova_pasta,
             projeto_num=self.projeto_num,
@@ -1373,20 +1406,28 @@ class TelaVerificacaoRevisao(tk.Tk):
         sys.exit(0)
 
 def main():
-    num_proj, caminho_proj = janela_selecao_projeto()
-    if not num_proj or not caminho_proj:
-        return
-    pasta_entrega = janela_selecao_disciplina(num_proj, caminho_proj)
-    if not pasta_entrega:
-        return   # usuário cancelou ou erro
-    
-    global NOMENCLATURA_GLOBAL, PASTA_ENTREGA_GLOBAL, NUM_PROJETO_GLOBAL
-    NOMENCLATURA_GLOBAL   = carregar_nomenclatura_json(num_proj)
-    PASTA_ENTREGA_GLOBAL  = pasta_entrega
-    NUM_PROJETO_GLOBAL    = num_proj
+    while True:  # seleção de projeto
+        num_proj, caminho_proj = janela_selecao_projeto()
+        if not num_proj or not caminho_proj:
+            return
+        while True:  # seleção de disciplina
+            pasta_entrega, voltar_proj = janela_selecao_disciplina(num_proj, caminho_proj)
+            if voltar_proj:
+                break  # volta para seleção de projeto
+            if not pasta_entrega:
+                return  # usuário cancelou
 
-    TelaVisualizacaoEntregaAnterior(
-        pasta_entregas=pasta_entrega,
-        projeto_num=num_proj,
-        disciplina=os.path.basename(os.path.dirname(pasta_entrega))
-    ).mainloop()
+            global NOMENCLATURA_GLOBAL, PASTA_ENTREGA_GLOBAL, NUM_PROJETO_GLOBAL
+            NOMENCLATURA_GLOBAL = carregar_nomenclatura_json(num_proj)
+            PASTA_ENTREGA_GLOBAL = pasta_entrega
+            NUM_PROJETO_GLOBAL = num_proj
+
+            tela = TelaVisualizacaoEntregaAnterior(
+                pasta_entregas=pasta_entrega,
+                projeto_num=num_proj,
+                disciplina=os.path.basename(os.path.dirname(pasta_entrega))
+            )
+            tela.mainloop()
+            if getattr(tela, "reabrir_disciplina", False):
+                continue  # reabrir seleção de disciplina
+            return

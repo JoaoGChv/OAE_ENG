@@ -9,6 +9,8 @@ import tempfile
 
 import pytest
 
+pytest.importorskip("flask")
+
 # Stub openpyxl like other tests so the modules import without the real package
 if 'openpyxl' not in sys.modules:
     openpyxl = types.ModuleType('openpyxl')
