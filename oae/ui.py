@@ -8,6 +8,7 @@ import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Sequence, Tuple
+import logging
 
 from .file_ops import (
     PROJETOS_JSON,
@@ -39,6 +40,8 @@ PASTA_ENTREGA_GLOBAL: str | None = None
 NOMENCLATURA_GLOBAL: Dict | None = None
 NUM_PROJETO_GLOBAL: str | None = None
 TIPO_ENTREGA_GLOBAL: str | None = None
+
+logger = logging.getLogger(__name__)
 
 def _center(win: tk.Toplevel | tk.Tk, parent: tk.Toplevel | tk.Tk | None = None) -> None:
     win.update_idletasks()
@@ -93,8 +96,24 @@ def escolher_tipo_entrega(master: tk.Toplevel | tk.Tk, size: tuple[int, int] = (
     card_pe.pack(side="left", padx=10, pady=5, expand=True, fill="both")
     _update_highlight()
     btn_box = ttk.Frame(win); btn_box.pack(pady=(6, 12))
-    ttk.Button(btn_box, text="OK", command=lambda: (escolha.update(val=selecionado.get()), win.destroy())).pack(side="left", padx=6)
-    ttk.Button(btn_box, text="Cancelar", command=win.destroy).pack(side="left", padx=6)
+
+    def _on_ok_click():
+        logger.debug("Escolher tipo OK clicked")
+        try:
+            escolha.update(val=selecionado.get())
+            win.destroy()
+            logger.debug("Escolher tipo OK executed successfully")
+        except Exception:
+            logger.exception("Erro ao confirmar tipo de entrega")
+
+    def _on_cancel_click():
+        logger.debug("Escolher tipo Cancelar clicked")
+        win.destroy()
+        logger.debug("Escolher tipo Cancelar executed successfully")
+
+    ttk.Button(btn_box, text="OK", command=_on_ok_click).pack(side="left", padx=6)
+    ttk.Button(btn_box, text="Cancelar", command=_on_cancel_click).pack(side="left", padx=6)
+
     _center(win, master)
     win.deiconify()
     master.wait_window(win)
@@ -141,14 +160,19 @@ def janela_selecao_projeto():
 
     # --------------- callbacks internos ---------------
     def confirmar():
-        sel_i = tree.selection()
-        if not sel_i:
-            return
-        iid = sel_i[0]
-        sel["num"]  = tree.set(iid, "Número")
-        índice      = int(tree.item(iid, "text"))          # usamos o índice salvo no item
-        sel["path"] = projetos[índice][1]                  # caminho completo
-        root.destroy()
+        logger.debug("Selecionar projeto confirmar clicked")
+        try:
+            sel_i = tree.selection()
+            if not sel_i:
+                return
+            iid = sel_i[0]
+            sel["num"] = tree.set(iid, "Número")
+            índice = int(tree.item(iid, "text"))
+            sel["path"] = projetos[índice][1]
+            root.destroy()
+            logger.debug("Selecionar projeto confirmar executed successfully")
+        except Exception:
+            logger.exception("Erro ao confirmar projeto")
 
     def filtrar(*_):
         termo = entrada.get().lower()
@@ -165,7 +189,11 @@ def janela_selecao_projeto():
     entrada = tk.Entry(root)
     entrada.pack(fill=tk.X, padx=10)
     entrada.bind("<KeyRelease>", filtrar)
-    entrada.bind("<Return>", lambda e: confirmar())
+    
+    def _on_return(_):
+        confirmar()
+
+    entrada.bind("<Return>", _on_return)
 
     cols = ("Número", "Nome do Projeto")
     tree = ttk.Treeview(root, columns=cols, show="headings", height=15)
@@ -203,8 +231,20 @@ def janela_erro_revisao(arquivos_alterados):
     tk.Label(janela, text=msg, bg="#FFA07A", font=("Arial", 12)).pack(padx=10, pady=10)
 
     def _encerra():
+        logger.debug("Erro revisao confirmar e sair clicked")
         janela.destroy()
+        logger.debug("Erro revisao confirm window closed")
         sys.exit(0)
+
+    def _ignorar():
+        logger.debug("Erro revisao ignorar clicked")
+        janela.destroy()
+        logger.debug("Erro revisao ignorar executed successfully")
+
+    tk.Button(janela, text="Confirmar e sair", command=_encerra).pack(pady=5)
+    tk.Button(janela, text="Ignorar", command=_ignorar).pack(pady=5)
+    janela.grab_set()
+    janela.mainloop()
 
     tk.Button(janela, text="Confirmar e sair", command=_encerra).pack(pady=5)
     tk.Button(janela, text="Ignorar", command=janela.destroy).pack(pady=5)
@@ -320,33 +360,50 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> tuple[str 
             lbl.bind("<Double-Button-1>", lambda e, p=path: _confirmar(p))
 
     def _confirmar(caminho_sel):
-        if not caminho_sel:
-            return
-        pasta_entregas = None
-        for folder in os.listdir(caminho_sel):
-            if folder.strip().lower().replace(" ", "") == "1.entregas":
-                pasta_entregas = os.path.join(caminho_sel, folder)
-                break
-        if not pasta_entregas or not os.path.isdir(pasta_entregas):
-            messagebox.showerror(
-                "Erro",
-                "A subpasta '1.ENTREGAS' não foi encontrada dentro da disciplina."
-            )
-            return
-        nonlocal_result[0] = pasta_entregas
-        _unbind_wheel()
-        root.destroy()
+        logger.debug("Selecao disciplina confirmar clicked")
+        try:
+            if not caminho_sel:
+                return
+            pasta_entregas = None
+            for folder in os.listdir(caminho_sel):
+                if folder.strip().lower().replace(" ", "") == "1.entregas":
+                    pasta_entregas = os.path.join(caminho_sel, folder)
+                    break
+            if not pasta_entregas or not os.path.isdir(pasta_entregas):
+                messagebox.showerror(
+                    "Erro",
+                    "A subpasta '1.ENTREGAS' não foi encontrada dentro da disciplina."
+                )
+                return
+            nonlocal_result[0] = pasta_entregas
+            _unbind_wheel()
+            root.destroy()
+            logger.debug("Selecao disciplina confirmar executed successfully")
+        except Exception:
+            logger.exception("Erro ao confirmar disciplina")
 
     footer = tk.Frame(root)
     footer.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
     button_frame = tk.Frame(footer)
     button_frame.pack(expand=True)
 
+    def _on_voltar():
+        logger.debug("Selecao disciplina voltar clicked")
+        # 1) destrói a janela atual
+        root.destroy()
+        # 2) abre imediatamente a tela de seleção de projeto
+        num, path = janela_selecao_projeto()
+        # 3) se o usuário cancelou, encerra o programa ou retorna valores nulos
+        if not num or not path:
+            sys.exit(0)   # ou return (None, False) se preferir
+        # 4) reenfila o fluxo chamando novamente disciplina para o novo projeto
+        return janela_selecao_disciplina(num, path)
+        
     btn_voltar = tk.Button(
         button_frame,
         text="Voltar",
         width=15,
-        command=lambda: (voltar_flag.update(val=True), root.destroy()),
+        command=_on_voltar,
     )
     btn_confirmar = tk.Button(
         button_frame,
@@ -576,6 +633,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
 
     # --------------------------- exclusão ----------------------------
     def _excluir_selecionados(self):
+        logger.debug("Visualizacao excluir selecionados clicked")
         marked = [iid for iid, val in self.checked.items() if val]
         if not marked:
             return
@@ -608,9 +666,11 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
                 "Aviso",
                 "Alguns arquivos não puderam ser excluídos:\n" + "\n".join(erros),
             )
+        logger.debug("Visualizacao excluir selecionados executed successfully")
 
     # --------------------------- navegação ---------------------------
     def _avancar(self):
+        logger.debug("Visualizacao avancar clicked")
         lista_init = []
         for iid in self.tree.get_children():
             if self.checked.get(iid):
@@ -620,20 +680,19 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         self.destroy()
         TelaAdicaoArquivos(lista_inicial=lista_init, pasta_entrega=self.pasta_entregas,
                            numero_projeto=self.projeto_num).mainloop()
+        logger.debug("Visualizacao avancar executed successfully")
 
     def _voltar(self):
+        logger.debug("Visualizacao voltar clicked")
         # caminho do projeto = três níveis acima de 1.ENTREGAS
-        caminho_proj = os.path.dirname(
-            os.path.dirname(          #  Disciplina
-                os.path.dirname(      #  3 Desenvolvimento
-                    self.pasta_entregas)))  # 1.ENTREGAS
+        caminho_proj = os.path.dirname(os.path.dirname(
+                os.path.dirname(self.pasta_entregas)))
 
         # esconde a janela atual temporariamente
         self.withdraw()
         nova_pasta = janela_selecao_disciplina(self.projeto_num, caminho_proj)
 
         if not nova_pasta:  # usuário cancelou
-            # reexibe a janela atual
             self.deiconify()
             return
 
@@ -644,6 +703,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
             projeto_num=self.projeto_num,
             disciplina=os.path.basename(os.path.dirname(nova_pasta))
         ).mainloop()
+        logger.debug("Visualizacao voltar executed successfully")
 
 # -----------------------------------------------------
 # Janela 1: TelaAdicaoArquivos
@@ -813,10 +873,13 @@ class TelaAdicaoArquivos(tk.Tk):
         self.canvas_global.configure(scrollregion=self.canvas_global.bbox("all"))
 
     def _cancelar(self):
+        logger.debug("Adicao arquivos cancelar clicked")
         self.destroy()
+        logger.debug("Adicao arquivos cancelar executed successfully")
         sys.exit(0)
 
     def _voltar(self):
+        logger.debug("Adicao arquivos voltar clicked")
         lista_atual = []
         for grupo, lst in self.arquivos_por_grupo.items():
             for (path, no_arq, base, rev, data_mod, ext) in lst:
@@ -832,8 +895,10 @@ class TelaAdicaoArquivos(tk.Tk):
             disciplina=self.disciplina,
             lista_inicial=lista_atual
         ).mainloop()
+        logger.debug("Adicao arquivos voltar executed successfully")
 
     def adicionar_arquivos(self):
+        logger.debug("Adicao arquivos adicionar clicked")
         init_dir = carregar_ultimo_diretorio()
         if not init_dir or not os.path.exists(init_dir):
             init_dir = os.path.expanduser("~")
@@ -859,6 +924,7 @@ class TelaAdicaoArquivos(tk.Tk):
                 self.arquivos_por_grupo[grupo].append((p, no_arq, base, rev, data_mod, ext))
 
         self.render_view()
+        logger.debug("Adicao arquivos adicionar executed successfully")
 
     def classificar_extensao(self, ext):
         if ext == ".pdf":
@@ -869,12 +935,16 @@ class TelaAdicaoArquivos(tk.Tk):
         return "Outros"
 
     def ativar_visualizar_tudo(self):
+        logger.debug("Adicao arquivos visualizar tudo clicked")
         self.view_mode = "all"
         self.render_view()
+        logger.debug("Adicao arquivos visualizar tudo executed successfully")
 
     def ativar_agrupado(self):
+        logger.debug("Adicao arquivos agrupado clicked")
         self.view_mode = "grouped"
         self.render_view()
+        logger.debug("Adicao arquivos agrupado executed successfully")
 
     def render_view(self):
         for child in self.inner_frame.winfo_children():
@@ -1005,6 +1075,7 @@ class TelaAdicaoArquivos(tk.Tk):
         tree.heading(col, command=lambda: self.sort_column(tree, col, not reverse))
 
     def remover_selecionados(self):
+        logger.debug("Adicao arquivos remover selecionados clicked")
         if self.view_mode == "grouped":
             for grupo, tree in self.tables.items():
                 sel = tree.selection()
@@ -1052,8 +1123,10 @@ class TelaAdicaoArquivos(tk.Tk):
                         if idx_rm is not None:
                             self.arquivos_por_grupo[gkey].pop(idx_rm)
                             break
+        logger.debug("Adicao arquivos remover selecionados executed successfully")      
 
     def proxima_janela_nomenclatura(self):
+        logger.debug("Adicao arquivos avancar clicked")
         final_list = []
         for grupo, lista_arqs in self.arquivos_por_grupo.items():
             for (path, no_arq, base, rev, data_mod, ext) in lista_arqs:
@@ -1063,6 +1136,7 @@ class TelaAdicaoArquivos(tk.Tk):
         self.destroy()
         tela = TelaVerificacaoNomenclatura(final_list)
         tela.mainloop()
+        logger.debug("Adicao arquivos avancar executed successfully")
 
 
 # -----------------------------------------------------
@@ -1200,6 +1274,7 @@ class TelaVerificacaoNomenclatura(tk.Tk):
 
     def mostrar_nomenclatura_padrao(self):
         """Exibe uma janela com a nomenclatura padrão, cada campo + separador."""
+        logger.debug("Nomenclatura mostrar padrao clicked")
         if not NOMENCLATURA_GLOBAL:
             messagebox.showinfo("Info", "Nomenclatura não definida para este projeto.")
             return
@@ -1253,17 +1328,20 @@ class TelaVerificacaoNomenclatura(tk.Tk):
                 row_vals.append(sep_)
 
         tv.insert("", tk.END, values=row_vals)
+        logger.debug("Nomenclatura mostrar padrao executed successfully")
 
     def voltar(self):
+        logger.debug("Nomenclatura voltar clicked")
         self.destroy()
-        # Reabrir a janela 1, repassando self.lista_arquivos
         TelaAdicaoArquivos(
             lista_inicial=self.lista_arquivos,
             pasta_entrega=PASTA_ENTREGA_GLOBAL,
             numero_projeto=NUM_PROJETO_GLOBAL
         ).mainloop()
+        logger.debug("Nomenclatura voltar executed successfully")
 
     def avancar(self):
+        logger.debug("Nomenclatura avancar clicked")
         global TIPO_ENTREGA_GLOBAL
         for iid in self.tree.get_children():
             tags_ = self.tree.item(iid, "tags")
@@ -1282,6 +1360,7 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         TIPO_ENTREGA_GLOBAL = escolha
         self.destroy()
         TelaVerificacaoRevisao(self.lista_arquivos).mainloop()
+        logger.debug("Nomenclatura avancar executed successfully")
 
 # -----------------------------------------------------
 # Janela 3: TelaVerificacaoRevisao
@@ -1340,10 +1419,13 @@ class TelaVerificacaoRevisao(tk.Tk):
         return tree
 
     def voltar(self):
+        logger.debug("Revisao voltar clicked")
         self.destroy()
         TelaVerificacaoNomenclatura(self.lista_arquivos).mainloop()
+        logger.debug("Revisao voltar executed successfully")
 
     def confirmar(self):
+        logger.debug("Revisao confirmar clicked")
         global TIPO_ENTREGA_GLOBAL
         if self.arquivos_alterados:
             self.withdraw()
@@ -1403,6 +1485,7 @@ class TelaVerificacaoRevisao(tk.Tk):
             self.obsoletos,
             TIPO_ENTREGA_GLOBAL,
         )
+        logger.debug("Revisao confirmar executed successfully")
         sys.exit(0)
 
 def main():
@@ -1430,4 +1513,8 @@ def main():
             tela.mainloop()
             if getattr(tela, "reabrir_disciplina", False):
                 continue  # reabrir seleção de disciplina
-            return
+            break  # finaliza ciclo do projeto
+
+        if voltar_proj:
+            continue
+        return

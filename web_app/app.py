@@ -64,10 +64,10 @@ def _next_delivery_dir(base: str, tipo: str) -> str:
     ]
     if entregas:
         nums = [int(re.search(r"(\d+)$", d).group(1)) for d in entregas]
-        n_atual = max(nums)
+        n_prox = max(nums) + 1
     else:
-        n_atual = 1
-    return os.path.join(pasta_base, f"{prefixo}{n_atual}")
+        n_prox = 1
+    return os.path.join(pasta_base, f"{prefixo}{n_prox}")
 
 def _folder_mais_recente(base: str, tipo: str) -> str | None:
     """Return the most recent delivery folder for AP or PE."""
