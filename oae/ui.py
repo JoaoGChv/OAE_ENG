@@ -395,7 +395,7 @@ def janela_selecao_disciplina(numero_proj: str, caminho_proj: str) -> tuple[str 
         num, path = janela_selecao_projeto()
         # 3) se o usuário cancelou, encerra o programa ou retorna valores nulos
         if not num or not path:
-            sys.exit(0)   # ou return (None, False) se preferir
+            sys.exit(0)   
         # 4) reenfila o fluxo chamando novamente disciplina para o novo projeto
         return janela_selecao_disciplina(num, path)
         
@@ -461,7 +461,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         cmb_tipo.bind("<<ComboboxSelected>>", lambda e: self._carregar_entrega())
 
         ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(ctrl, text="Avançar", command=self._avancar).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Adicionar Arquivos", command=self._avancar).pack(side=tk.RIGHT, padx=5)
         ttk.Button(ctrl, text="Voltar", command=self._voltar).pack(side=tk.RIGHT, padx=5)
 
         # tabela --------------------------------------------------------------
@@ -985,8 +985,12 @@ class TelaAdicaoArquivos(tk.Tk):
         for grupo, lista in grupos:
             quadro = tk.Frame(self.paned)
             self._criar_quadro_grupo(quadro, grupo, lista)
-            # minsize evita altura 0 mesmo se lista esvaziar depois
-            self.paned.add(quadro, weight=1, minsize=120)
+            # "minsize" nem sempre é suportado dependendo da versão do Tk.
+            # Tenta usar e, se não estiver disponível, faz o fallback.
+            try:
+                self.paned.add(quadro, weight=1, minsize=120)
+            except tk.TclError:
+                self.paned.add(quadro, weight=1)
 
     # --------------------------------------------------------------
     # Função auxiliar reaproveitada pelos dois caminhos
@@ -1176,6 +1180,12 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         tk.Button(frm_botoes, text="Mostrar Padrão", command=self.mostrar_nomenclatura_padrao).pack(side=tk.LEFT, padx=5)
         tk.Button(frm_botoes, text="Voltar", command=self.voltar).pack(side=tk.LEFT, padx=5)
         tk.Button(frm_botoes, text="Avançar", command=self.avancar).pack(side=tk.RIGHT, padx=5)
+
+        legend = (
+            "Vermelho: token incorreto na nomenclatura. "
+            "Amarelo: token faltando."
+        )
+        tk.Label(container, text=legend, font=("Arial", 10)).pack(anchor="w", pady=(0, 5))
 
         # Cria Treeview
         frame_tv = tk.Frame(container)
