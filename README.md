@@ -13,7 +13,7 @@
 - Organização de Arquivos: Os arquivos são movidos para pastas "Revisados" e "Obsoletos" para melhor organização.
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# Para consguir rodar a aplicação em qualquer máquina, faça o seguinte processo:
+# Para consguir rodar a aplicação em qualquer máquina, faça o seguinte processo: 
 
 Instale o Python (Qualquer versão que tenha suporte);
 - Rode no seu terminal (Linux ou PowerShell) - python -m venv venv ( __No Windows: .\venv\Scripts\activate__ );

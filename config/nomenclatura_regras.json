@@ -1,5 +1,5 @@
 {
-    "Status": {
+    "Status": { 
       "tipo": "fixo",
       "valores_permitidos": ["E", "C", "P", "A", "R"],
       "obrigatorio": true,

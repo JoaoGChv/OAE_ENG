@@ -598,7 +598,7 @@ def exibir_interface_tabela(
     caminho_projeto: str | None = None,
     pasta_entrega: str | None = None,
     master=None
-):
+): 
     exibir_win = tk.Toplevel(master)
     exibir_win.title(f"Gerenciador de Projetos - Projeto {numero}")
     exibir_win.geometry("1200x800")
