@@ -20,7 +20,7 @@ class DummyMessageBox:
         self.ask_called = False
         self.warn_called = False
     def askyesno(self, *a, **k):
-        self.ask_called = True
+        self.ask_called = True 
         return True
     def showwarning(self, *a, **k):
         self.warn_called = True

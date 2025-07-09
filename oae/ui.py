@@ -1227,7 +1227,7 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         # Configuramos tags
         self.tree.tag_configure("mismatch", background="#FF9999")  # vermelho clarinho
         self.tree.tag_configure("missing", background="#FFFF99")   # amarelo clarinho
-        self.tree.tag_configure("ok", background="white")
+        self.tree.tag_configure("ok", background="white") 
 
         self.preencher_arvore()
 

@@ -230,7 +230,7 @@ def verificar_tokens(tokens: Sequence[str], nomenclatura: Dict | None) -> List[s
     while idx_tok < len(tokens):
         result_tags.append("mismatch")
         idx_tok += 1
-    while idx_exp < len(tokens_esperados):
+    while idx_exp < len(tokens_esperados): 
         result_tags.append("missing")
         idx_exp += 1
     return result_tags

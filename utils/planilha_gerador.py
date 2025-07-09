@@ -205,7 +205,7 @@ def criar_ou_atualizar_planilha(
         snap = snapshot_ant.get(key_)
         if snap:
             row = snap["row"]
-            status = _determinar_status(info, snap)
+            status = _determinar_status(info, snap) 
         else:
             row = linha_cursor
             linha_cursor += 1

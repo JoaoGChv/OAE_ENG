@@ -1,97 +1,110 @@
 # OAE Engineering Tools
 
-This repository includes utilities for managing project deliveries. A simple web
-interface based on Flask can be used to trigger the delivery routines and test
-the spreadsheet generation.
+Este repositório inclui utilitários para gerenciar entregas de projetos. Uma interface web simples baseada em Flask pode ser usada para acionar as rotinas de entrega e testar a geração de planilhas, e um aplicativo baseado em Tkinter ajuda a organizar e verificar os entregáveis do projeto.
 
-## Running the Web Server
+-----
 
+## Configurando Seu Ambiente Python (Setting Up Your Python Environment)
 
-1. Create a Venv:
+Antes de começar, certifique-se de ter o **Python 3** instalado em seu sistema. Você pode baixá-lo no [site oficial do Python](https://www.python.org/downloads/).
+
+### 1\. Instalar `pip` (Install `pip`)
+
+`pip` é o instalador de pacotes para Python. Geralmente, ele já vem pré-instalado com o Python 3. Para verificar se você tem o `pip` e instalá-lo caso não tenha, abra seu terminal ou prompt de comando e execute:
+
+```bash
+python -m ensurepip --default-pip
+```
+
+### 2\. Criar um Ambiente Virtual (Create a Virtual Environment)
+
+É altamente recomendável usar um ambiente virtual para gerenciar as dependências do projeto. Isso isola as dependências do projeto de outros projetos Python em seu sistema.
+
+Navegue até o diretório raiz deste repositório (o arquivo `gerenciar_entregas.py` deve estar neste diretório) e execute:
 
 ```bash
 python -m venv myvenv
 ```
 
-2. Venv Activate:
+Este comando cria um novo diretório chamado `myvenv` (você pode escolher um nome diferente se preferir) que contém um ambiente Python novo.
+
+### 3\. Ativar o Ambiente Virtual (Activate the Virtual Environment)
+
+Antes de instalar as dependências ou executar os aplicativos, você precisa ativar seu ambiente virtual.
+
+**No Windows (PowerShell):**
 
 ```bash
 .\myvenv\Scripts\Activate.ps1
 ```
 
-3. Install dependencies:
+**No Windows (Prompt de Comando):**
 
 ```bash
-pip install flask openpyxl send2trash
+.\myvenv\Scripts\activate.bat
 ```
 
-4. Start the server from the repository root:
+**No macOS/Linux:**
 
 ```bash
-flask --app web_app.app run
+source myvenv/bin/activate
 ```
 
-The application will be available at `http://127.0.0.1:5000/`.
+Uma vez ativado, seu prompt de terminal geralmente mostrará `(myvenv)` indicando que você está operando dentro do ambiente virtual.
 
-Access `http://127.0.0.1:5000/` and choose **New Delivery** to select a
-project and upload files. Uploaded files are copied to a new delivery folder and
-a GRD spreadsheet is generated automatically. The demo link still creates a
-dummy spreadsheet in your temporary directory.
+-----
 
-Additional pages:
+## Instalando Dependências (Installing Dependencies)
 
-- `/history?folder=<ENTREGAS_PATH>&tipo=AP` – view the most recent delivery
-  files for a discipline.
-- `/nomenclature?folder=<PASTA>&num=<PROJETO>` – check naming tokens of files
-  using the JSON nomenclature rules.
+Após ativar seu ambiente virtual, você pode instalar todos os pacotes necessários usando o arquivo `requirements.txt`.
 
-# OAE Engineering Delivery Manager
+### 1\. Baixar `requirements.txt` (Download `requirements.txt`)
 
-This repository contains tools for managing deliveries and generating Excel spreadsheets.
+Se você ainda não tiver um arquivo `requirements.txt`, precisará criar um. Este arquivo lista todos os pacotes Python e suas versões necessárias para o projeto. Para este projeto, um `requirements.txt` básico seria assim:
 
-## Installation
+```
+flask
+openpyxl
+send2trash
+```
 
-Install the required Python packages using pip:
+Salve este conteúdo em um arquivo chamado `requirements.txt` no diretório raiz do seu projeto.
+
+### 2\. Instalar Pacotes Necessários (Install Required Packages)
+
+Com o `requirements.txt` no lugar e seu ambiente virtual ativado, instale as dependências executando:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+Este comando fará o download e instalará todos os pacotes listados.
 
-Run the main script to start the application:
+-----
 
-```bash
-python gerenciar_entregas.py
-```
+## Configurando Variáveis de Ambiente (Configuring Environment Variables)
 
-`gerenciar_entregas.py` is a Tkinter-based tool that helps organize and verify
-project deliverables. It reads project and nomenclature information from JSON
-files, assists in selecting files for each delivery and generates or updates
-a GRD (`GRD_ENTREGAS.xlsx`).
+Os locais padrão para os arquivos JSON usados pelo aplicativo podem ser substituídos usando variáveis de ambiente. Essas variáveis especificam os caminhos para os arquivos de configuração que o script usa.
 
-## Requirements
+Para definir uma variável de ambiente, você normalmente faria o seguinte:
 
-- Python 3 with Tkinter available
-- `openpyxl` (required)
-- `send2trash` (optional, for safe deletion)
-
-Install packages with:
+**No Windows (Prompt de Comando):**
 
 ```bash
-pip install openpyxl send2trash
+set OAE_PROJETOS_JSON="C:\caminho\para\seu\diretorios_projetos.json"
+set OAE_NOMENCLATURAS_JSON="C:\caminho\para\seu\nomenclaturas.json"
+set OAE_ULTIMO_DIR_JSON="C:\caminho\para\seu\ultimo_diretorio_arqs.json"
 ```
 
-## Environment Variables
+**No macOS/Linux:**
 
-Default locations for JSON files can be overridden using the following
-variables:
+```bash
+export OAE_PROJETOS_JSON="/caminho/para/seu/diretorios_projetos.json"
+export OAE_NOMENCLATURAS_JSON="/caminho/para/seu/nomenclaturas.json"
+export OAE_ULTIMO_DIR_JSON="/caminho/para/seu/ultimo_diretorio_arqs.json"
+```
 
-- `OAE_PROJETOS_JSON` – path to the JSON containing project directories.
-- `OAE_NOMENCLATURAS_JSON` – path to the JSON with naming conventions.
-- `OAE_ULTIMO_DIR_JSON` – path where the last used directory is stored.
-
-The script defines these defaults internally:
+O script define esses padrões internamente se as variáveis de ambiente não forem definidas:
 
 ```python
 PROJETOS_JSON = _resolve_json_path(
@@ -107,33 +120,66 @@ ARQ_ULTIMO_DIR = _resolve_json_path(
     r"G:\Drives compartilhados\OAE-JSONS\ultimo_diretorio_arqs.json",
 )
 ```
-## Gerando Executável (.exe)
 
-1. Instale o PyInstaller:
+-----
 
-```bash
-pip install pyinstaller
-```
+## Rodando o Servidor Web (Running the Web Server)
 
-2. Execute o comando abaixo para gerar o executável:
+Este repositório inclui uma interface web simples baseada em Flask que pode ser usada para acionar rotinas de entrega e testar a geração de planilhas.
 
-```bash
-pyinstaller --onefile --windowed gerenciar_entregas.py
-```
+Certifique-se de que seu ambiente virtual esteja ativado e as dependências instaladas.
 
-O executável será criado no diretório `dist/`.
+1.  **Inicie o servidor** a partir da raiz do repositório (onde `web_app/app.py` está localizado, ou simplesmente do diretório onde `gerenciar_entregas.py` reside):
 
-Certifique-se de instalar previamente todas as dependências listadas em
-`requirements.txt` para que a criação do executável ocorra sem erros.
-## Usage
+    ```bash
+    flask --app web_app.app run
+    ```
 
-Run the application with Python:
+    O aplicativo estará disponível em `http://127.0.0.1:5000/`.
+
+Acesse `http://127.0.0.1:5000/` e escolha **New Delivery** (Nova Entrega) para selecionar um projeto e fazer upload de arquivos. Os arquivos carregados são copiados para uma nova pasta de entrega, e uma planilha GRD é gerada automaticamente. O link de demonstração ainda cria uma planilha fictícia em seu diretório temporário.
+
+**Páginas adicionais (Additional pages):**
+
+  * `/history?folder=<ENTREGAS_PATH>&tipo=AP` – visualize os arquivos de entrega mais recentes para uma disciplina.
+  * `/nomenclature?folder=<PASTA>&num=<PROJETO>` – verifique os tokens de nomenclatura dos arquivos usando as regras de nomenclatura JSON.
+
+-----
+
+## Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
+
+`gerenciar_entregas.py` é uma ferramenta baseada em Tkinter que ajuda a organizar e verificar os entregáveis do projeto. Ele lê informações do projeto e de nomenclatura de arquivos JSON, auxilia na seleção de arquivos para cada entrega e gera ou atualiza um GRD (`GRD_ENTREGAS.xlsx`).
+
+Para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
 
 ```bash
 python gerenciar_entregas.py
 ```
 
-A graphical interface will guide you through selecting the project, choosing
-files and updating the GRD spreadsheet.
+Uma interface gráfica irá guiá-lo na seleção do projeto, escolha de arquivos e atualização da planilha GRD.
 
+-----
 
+## Gerando um Executável (.exe) (Generating an Executable (.exe))
+
+Você pode converter o script `gerenciar_entregas.py` em um arquivo executável autônomo (`.exe`) usando o PyInstaller.
+
+1.  **Instalar PyInstaller:**
+
+    ```bash
+    pip install pyinstaller
+    ```
+
+2.  **Gerar o executável:**
+
+    Navegue até o diretório raiz do repositório em seu terminal e execute:
+
+    ```bash
+    pyinstaller --onefile --windowed gerenciar_entregas.py
+    ```
+
+    O executável será criado no diretório `dist/`.
+
+Certifique-se de ter instalado previamente todas as dependências listadas em `requirements.txt` para que a criação do executável ocorra sem erros.
+
+-----

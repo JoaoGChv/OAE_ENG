@@ -13,7 +13,7 @@ if 'openpyxl' not in sys.modules:
             pass
 
     openpyxl.styles = types.ModuleType('openpyxl.styles')
-    openpyxl.styles.Alignment = _Dummy
+    openpyxl.styles.Alignment = _Dummy 
     openpyxl.styles.Font = _Dummy
     openpyxl.styles.PatternFill = _Dummy
     openpyxl.utils = types.ModuleType('openpyxl.utils')

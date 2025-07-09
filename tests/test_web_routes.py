@@ -19,7 +19,7 @@ if 'openpyxl' not in sys.modules:
     class _Dummy:
         def __init__(self, *a, **k):
             pass
-    openpyxl.styles = types.ModuleType('openpyxl.styles')
+    openpyxl.styles = types.ModuleType('openpyxl.styles') 
     openpyxl.styles.Alignment = _Dummy
     openpyxl.styles.Font = _Dummy
     openpyxl.styles.PatternFill = _Dummy
