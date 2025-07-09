@@ -1120,6 +1120,18 @@ def criar_arquivo_controle(pasta_raiz_entregas: str) -> None:
     wb = load_workbook(TEMPLATE_XLSX)
     ws = wb.active
 
+    col_inicio_ent = 3  # A=Grupo, B=Extens., C = primeira entrega
+    while ws.cell(row=5, column=col_inicio_ent).value:
+        # apaga o cabeçalho
+        ws.cell(row=5, column=col_inicio_ent).value = None
+        # apaga intervalo de dados (linhas 6-2000, ajuste conforme precisar)
+        for row in ws.iter_rows(min_row=6, max_row=2000,
+                                min_col=col_inicio_ent, max_col=col_inicio_ent):
+            for cell in row:
+                cell.value = None
+                cell.fill  = None
+        col_inicio_ent += 1
+
     # map cores
     fill_verde   = PatternFill("solid", fgColor="C6EFCE")
     fill_azul    = PatternFill("solid", fgColor="9BC2E6")
