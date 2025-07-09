@@ -6,21 +6,27 @@ Este repositório inclui utilitários para gerenciar entregas de projetos. Uma i
 
 ## Configurando Seu Ambiente Python (Setting Up Your Python Environment)
 
-Antes de começar, certifique-se de ter o **Python 3** instalado em seu sistema. Você pode baixá-lo no [site oficial do Python](https://www.python.org/downloads/).
+Antes de começar, é necessário ter instalado em sua máquina, o python, idealmente a versão 3.12.3 que foi a utilizada no código, caso opte por usar de uma versão mais nova será necessário também atualizar as demais bibliotecas utilizadas no código. Caso não tenho o python instalado você pode baixá-lo no:
+
+ [site oficial do Python](https://www.python.org/downloads/).
+
+ [Vídeo Tutotial para instalação e configuração das variáveis de ambiente](https://www.youtube.com/watch?v=WgFqLVRh0Y0).
+
+ Feito isso, podemos partir para as instalações de bibliotecas:
+
+ -----
 
 ### 1\. Instalar `pip` (Install `pip`)
 
 `pip` é o instalador de pacotes para Python. Geralmente, ele já vem pré-instalado com o Python 3. Para verificar se você tem o `pip` e instalá-lo caso não tenha, abra seu terminal ou prompt de comando e execute:
 
 ```bash
-python -m ensurepip --default-pip
+pip --version
 ```
 
 ### 2\. Criar um Ambiente Virtual (Create a Virtual Environment)
 
-É altamente recomendável usar um ambiente virtual para gerenciar as dependências do projeto. Isso isola as dependências do projeto de outros projetos Python em seu sistema.
-
-Navegue até o diretório raiz deste repositório (o arquivo `gerenciar_entregas.py` deve estar neste diretório) e execute:
+É altamente recomendável usar um ambiente virtual para gerenciar as dependências do projeto. Isso isola as dependências do projeto de outros projetos Python em seu sistema. No caso, trazendo um contexto venv ou ambiente virtual é uma ferramenta integrada ao Python que permite criar ambientes virtuais isolados. Esses ambientes são importantes porque permitem que cada projeto tenha suas próprias dependências, sem interferir em outros projetos ou na instalação global do Python. Tendo isso entendido, navegue até o diretório raiz deste repositório (o arquivo `gerenciar_entregas.py` deve estar neste diretório) e execute:
 
 ```bash
 python -m venv myvenv
@@ -58,19 +64,7 @@ Uma vez ativado, seu prompt de terminal geralmente mostrará `(myvenv)` indicand
 
 Após ativar seu ambiente virtual, você pode instalar todos os pacotes necessários usando o arquivo `requirements.txt`.
 
-### 1\. Baixar `requirements.txt` (Download `requirements.txt`)
-
-Se você ainda não tiver um arquivo `requirements.txt`, precisará criar um. Este arquivo lista todos os pacotes Python e suas versões necessárias para o projeto. Para este projeto, um `requirements.txt` básico seria assim:
-
-```
-flask
-openpyxl
-send2trash
-```
-
-Salve este conteúdo em um arquivo chamado `requirements.txt` no diretório raiz do seu projeto.
-
-### 2\. Instalar Pacotes Necessários (Install Required Packages)
+## Instalar Pacotes Necessários (Install Required Packages)
 
 Com o `requirements.txt` no lugar e seu ambiente virtual ativado, instale as dependências executando:
 
