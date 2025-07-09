@@ -460,7 +460,7 @@ class TelaVisualizacaoEntregaAnterior(tk.Tk):
         cmb_tipo.pack(side=tk.LEFT, padx=5)
         cmb_tipo.bind("<<ComboboxSelected>>", lambda e: self._carregar_entrega())
 
-        ttk.Button(ctrl, text="Excluir selecionados", command=self._excluir_selecionados).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(ctrl, text="Tornar Obsoletos", command=self._excluir_selecionados).pack(side=tk.RIGHT, padx=5)
         ttk.Button(ctrl, text="Adicionar Arquivos", command=self._avancar).pack(side=tk.RIGHT, padx=5)
         ttk.Button(ctrl, text="Voltar", command=self._voltar).pack(side=tk.RIGHT, padx=5)
 
@@ -1201,15 +1201,18 @@ class TelaVerificacaoNomenclatura(tk.Tk):
         # Definimos a quantidade de colunas = "máximo de tokens" que possamos ter
         # em qualquer arquivo. A cada arquivo, iremos tokenizar. Se um arquivo tiver 20 tokens,
         # e outro 24, tomamos o max.
-        self.max_tokens = 0
-        self.tabela_por_arquivo = []  # guardamos tokens de cada arquivo
+        # quantidade de tokens esperados pela nomenclatura (campos + separadores)
+        campos_cfg = NOMENCLATURA_GLOBAL.get("campos", []) if NOMENCLATURA_GLOBAL else []
+        expected_tokens = 2 * len(campos_cfg) - 1 if campos_cfg else 0
 
-        # Calcula o max_tokens
+        # também consideramos o maximo de tokens real dos arquivos lidos
+        real_max = 0
         for (rv, arq, tam, path, dmod) in self.lista_arquivos:
             nome_sem_ext, _ = os.path.splitext(arq)
             tokens = split_including_separators(nome_sem_ext, NOMENCLATURA_GLOBAL)
-            if len(tokens) > self.max_tokens:
-                self.max_tokens = len(tokens)
+            real_max = max(real_max, len(tokens))
+
+        self.max_tokens = max(expected_tokens, real_max)
 
         # Criamos colunas: col0 => "Arquivo", col1.. => tokens
         # Mas removemos a "Arquivo"? O enunciado pediu sem a primeira col "Nome do arquivo".
@@ -1263,24 +1266,16 @@ class TelaVerificacaoNomenclatura(tk.Tk):
                     # se sobrou
                     row_tags.append('missing')
 
-            # insere item
-            item_id = self.tree.insert("", tk.END, values=row_vals)
-            # para cada coluna, se row_tags[i] != 'ok', definimos a tag naquela célula
-            for i, tg in enumerate(row_tags):
-                if tg in ['mismatch','missing']:
-                    self.tree.set(item_id, self.tree["columns"][i], row_vals[i])
-                    self.tree.item(item_id, tags=(tg,))  # Marca a linha com a tag
-                # Observação: com a Treeview default, a tag é para a linha inteira,
-                # mas podemos simular "célula" colorida com 'tag_cell = (item_id, column)' 
-                # e um workaround. Para simplificar, a doc. oficial do tkinter não
-                # coloriza células individualmente sem bibliotecas extras.
-                # Então a approach do treeview do tkinter colore a "linha" 
-                # se encontrar mismatch em qualquer token.
-                if tg != 'ok':
-                    # se preferir colorir a linha toda se tiver 1 mismatch
-                    # mas o enunciado diz "não toda a linha, apenas a célula".
-                    # Precisaríamos de um workaround custom. 
-                    pass
+            # determina a tag final da linha
+            if 'missing' in row_tags:
+                final_tag = 'missing'
+            elif 'mismatch' in row_tags:
+                final_tag = 'mismatch'
+            else:
+                final_tag = 'ok'
+
+            # insere item com a tag final
+            item_id = self.tree.insert("", tk.END, values=row_vals, tags=(final_tag,))
 
     def mostrar_nomenclatura_padrao(self):
         """Exibe uma janela com a nomenclatura padrão, cada campo + separador."""
