@@ -7,7 +7,7 @@ import re
 import shutil
 from typing import Dict, List, Sequence, Tuple
 
-from utils.planilha_gerador import criar_ou_atualizar_planilha
+from utils.planilha_gerador import criar_ou_atualizar_planilha, _key
 
 try:
     from openpyxl import Workbook
@@ -50,6 +50,15 @@ MESES = (
     "julho","agosto","setembro","outubro","novembro","dezembro"
 )
 
+# Se quiser voltar ao que era originalmente comente as linhas:
+# -  GRD_MASTER_AP_NOME = "GRD_ENTREGAS_AP.xlsx"
+# - GRD_MASTER_PE_NOME = "GRD_ENTREGAS_PE.xlsx"
+
+# Arquivo de planilha consolidada para entregas.
+# A partir de agora mantemos versões separadas para entregas AP e PE.
+GRD_MASTER_AP_NOME = "GRD_ENTREGAS_AP.xlsx"
+GRD_MASTER_PE_NOME = "GRD_ENTREGAS_PE.xlsx"
+# Mantido para compatibilidade com versões antigas
 GRD_MASTER_NOME = "GRD_ENTREGAS.xlsx"
 
 
@@ -359,7 +368,16 @@ def criar_arquivo_excel(diretorio: str, num_entrega: int, arquivos):
 
 
 def listar_arquivos_no_diretorio(diretorio):
-    ignorar = {"dados_execucao_anterior.json", GRD_MASTER_NOME}
+
+    # Se quiser voltar ao que era originalmente descomente esse trecho abaixo:
+    # ignorar = {"dados_execucao_anterior.json", GRD_MASTER_NOME}
+
+    # Seguindo: E comente as linhas de master até caminho_excel.   
+    ignorar = {
+        "dados_execucao_anterior.json",
+        GRD_MASTER_AP_NOME,
+        GRD_MASTER_PE_NOME,
+    }
     for f in os.listdir(diretorio):
         if f.startswith("GRD-ENTREGA."):
             ignorar.add(f)
@@ -382,9 +400,9 @@ def listar_arquivos_no_diretorio(diretorio):
 def analisar_comparando_estado(lista_de_arquivos, dados_anteriores):
     grouping = {}
     for rv, a, tam, cam, dmod in lista_de_arquivos:
-        nb, revision, ex = identificar_nome_com_revisao(a)
-        key = (nb.lower(), ex.lower())
-        grouping.setdefault(key, []).append((rv, a, tam, cam, dmod))
+        
+        nb, ex = _key(a)
+        grouping.setdefault((nb, ex), []).append((rv, a, tam, cam, dmod))
     novos = []
     revisados = []
     alterados = []
@@ -439,7 +457,16 @@ def pos_processamento(
 ):
     """Atualiza registros e planilhas após a análise de entrega."""
     num_entrega_atual = dados_anteriores.get("entregas_oficiais", 0) + 1
-    caminho_excel_master = os.path.join(diretorio, GRD_MASTER_NOME)
+
+    # Se quiser voltar ao que era originalmente descomente esse trecho abaixo:
+    # caminho_excel_master = os.path.join(diretorio, GRD_MASTER_NOME)
+
+    # Seguindo: E comente as linhas de master até caminho_excel.   
+    master = GRD_MASTER_AP_NOME
+    if (tipo_entrega or "AP") == "PE":
+        master = GRD_MASTER_PE_NOME
+    caminho_excel_master = os.path.join(diretorio, master)
+    
     if not primeira_entrega:
         if obsoletos or dados_anteriores.get("entregas_oficiais", 0) >= 1:
             mover_obsoletos_e_grd_anterior(obsoletos, diretorio, num_entrega_atual)

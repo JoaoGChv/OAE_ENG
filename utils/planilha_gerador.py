@@ -76,10 +76,11 @@ def _set_widths(ws):
 # ---------------------------------------------------------------------------
 def _key(nome: str) -> Tuple[str, str]:
     base, ext = os.path.splitext(nome)
-    m = REV_REGEX.search(base)
+    base_norm = base.replace("_", "-")
+    m = REV_REGEX.search(base_norm)
     if m:
-        base = base[: m.start()]
-    return base.lower(), ext.lower()
+        base_norm = base_norm[: m.start()]
+    return base_norm.lower(), ext.lower()
 
 
 def _extrair_rev(nome: str) -> str:
@@ -156,7 +157,8 @@ def criar_ou_atualizar_planilha(
     estado_anterior: Dict[str, Dict[str, object]] | None = None,
 ):
     caminho_excel = Path(caminho_excel)
-    wb, ws, _ = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
+    #Caso queria voltar ao que era originalmente, comente ou apague a variável "criado" logo na linha abaixo:
+    wb, ws, criado = _abrir_ou_criar_wb(caminho_excel, diretorio_base)
 
     ws.freeze_panes = "J10"
     _set_widths(ws)
@@ -179,7 +181,32 @@ def criar_ou_atualizar_planilha(
                            end_color=COR_TITULO,
                            fill_type="solid")
 
-    snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_prev, estado_anterior)
+    #Caso queria voltar ao que era originalmente, descomente a linha abaixo:
+    # snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_prev, estado_anterior)
+
+    # Seguindo: E comente as linhas do IF até snapshot_ant (...).   
+    if criado and estado_anterior:
+        snapshot_ant: Dict[Tuple[str, str], Dict[str, object]] = {}
+        linha_tmp = ws.max_row + 1
+        for chave, dados in estado_anterior.items():
+            try:
+                base, ext = chave.split("|", 1)
+            except ValueError:
+                continue
+            base = base.lower()
+            ext = ext.lower()
+            ws.cell(row=linha_tmp, column=_col_idx("K"),
+                    value=_classificar_extensao(ext))
+            ws.cell(row=linha_tmp, column=_col_idx("L"), value=ext)
+            snapshot_ant[(base, ext)] = {
+                "rev": dados.get("revisao", ""),
+                "tam": dados.get("tamanho"),
+                "ts": dados.get("timestamp"),
+                "row": linha_tmp,
+            }
+            linha_tmp += 1
+    else:
+        snapshot_ant = _carregar_snapshot(ws, linha_titulo, col_prev, estado_anterior)
 
     atual_info = {}
     for rev, nome, tam, full_path, _ in arquivos:
