@@ -65,27 +65,39 @@ Para conectar seu computador ao GitHub, você precisa de uma forma de autentica�
 Para enviar um projeto local para um novo repositório no GitHub:
 
 1.  **Crie um novo repositório no GitHub:** Vá ao GitHub e crie um novo repositório. Não o inicialize com um arquivo README, .gitignore ou licença.
+   
 2.  **Inicialize o repositório local:** Navegue até a pasta do seu projeto no terminal e execute:
+   
     ```bash
     git init
     ```
+    
 3.  **Adicione os arquivos ao stage:** Para adicionar todos os arquivos do projeto para serem monitorados pelo Git, use:
+   
     ```bash
     git add .
     ```
+  
 4.  **Faça o commit dos arquivos:** O "commit" é como um instantâneo do seu projeto. Salve suas alterações com uma mensagem descritiva:
+   
     ```bash
     git commit -m "Primeiro commit: início do projeto"
     ```
+    
 5.  **Conecte seu repositório local ao repositório remoto (GitHub):**
+   
     ```bash
     git remote add origin URL_DO_SEU_REPOSITORIO.git
     ```
+    
     *Substitua `URL_DO_SEU_REPOSITORIO.git` pela URL que você copiou do seu repositório no GitHub.*
+    
 6.  **Envie suas alterações (push):**
+
     ```bash
     git push -u origin main
     ```
+    
     *Se sua branch principal não se chamar `main`, substitua pelo nome correto (ex: `master`).*
 
 ### 1.5. Como Clonar um Repositório (git clone)
@@ -94,6 +106,7 @@ Para baixar uma cópia de um projeto que já existe no GitHub (como este), você
 
 1.  **Copie a URL do repositório:** No GitHub, clique no botão verde "Code" e copie a URL (HTTPS ou SSH).
 2.  **Clone o repositório:** Abra o terminal, navegue até o diretório onde deseja salvar o projeto e execute:
+   
     ```bash
     git clone URL_DO_REPOSITORIO_COPIADA
     ```
