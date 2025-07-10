@@ -58,13 +58,7 @@ source myvenv/bin/activate
 
 Uma vez ativado, seu prompt de terminal geralmente mostrará `(myvenv)` indicando que você está operando dentro do ambiente virtual.
 
------
-
-## Instalando Dependências (Installing Dependencies)
-
-Após ativar seu ambiente virtual, você pode instalar todos os pacotes necessários usando o arquivo `requirements.txt`.
-
-## Instalar Pacotes Necessários (Install Required Packages)
+## 4\. Instalar Pacotes Necessários (Install Required Packages)
 
 Com o `requirements.txt` no lugar e seu ambiente virtual ativado, instale as dependências executando:
 
@@ -74,9 +68,7 @@ pip install -r requirements.txt
 
 Este comando fará o download e instalará todos os pacotes listados.
 
------
-
-## Configurando Variáveis de Ambiente (Configuring Environment Variables)
+## 5\. Configurando Variáveis de Ambiente (Configuring Environment Variables)
 
 Os locais padrão para os arquivos JSON usados pelo aplicativo podem ser substituídos usando variáveis de ambiente. Essas variáveis especificam os caminhos para os arquivos de configuração que o script usa.
 
@@ -114,6 +106,15 @@ ARQ_ULTIMO_DIR = _resolve_json_path(
     r"G:\Drives compartilhados\OAE-JSONS\ultimo_diretorio_arqs.json",
 )
 ```
+## 6\. Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
+
+Após tudo o que foi feito, podemos rodar nossa aplicação para tanto, para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
+
+```bash
+python gerenciar_entregas.py
+```
+
+Uma interface gráfica irá guiá-lo na seleção do projeto, escolha de arquivos e atualização da planilha GRD.
 
 -----
 
@@ -133,47 +134,3 @@ Certifique-se de que seu ambiente virtual esteja ativado e as dependências inst
 
 Acesse `http://127.0.0.1:5000/` e escolha **New Delivery** (Nova Entrega) para selecionar um projeto e fazer upload de arquivos. Os arquivos carregados são copiados para uma nova pasta de entrega, e uma planilha GRD é gerada automaticamente. O link de demonstração ainda cria uma planilha fictícia em seu diretório temporário.
 
-**Páginas adicionais (Additional pages):**
-
-  * `/history?folder=<ENTREGAS_PATH>&tipo=AP` – visualize os arquivos de entrega mais recentes para uma disciplina.
-  * `/nomenclature?folder=<PASTA>&num=<PROJETO>` – verifique os tokens de nomenclatura dos arquivos usando as regras de nomenclatura JSON.
-
------
-
-## Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
-
-`gerenciar_entregas.py` é uma ferramenta baseada em Tkinter que ajuda a organizar e verificar os entregáveis do projeto. Ele lê informações do projeto e de nomenclatura de arquivos JSON, auxilia na seleção de arquivos para cada entrega e gera ou atualiza um GRD (`GRD_ENTREGAS.xlsx`).
-
-Para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
-
-```bash
-python gerenciar_entregas.py
-```
-
-Uma interface gráfica irá guiá-lo na seleção do projeto, escolha de arquivos e atualização da planilha GRD.
-
------
-
-## Gerando um Executável (.exe) (Generating an Executable (.exe))
-
-Você pode converter o script `gerenciar_entregas.py` em um arquivo executável autônomo (`.exe`) usando o PyInstaller.
-
-1.  **Instalar PyInstaller:**
-
-    ```bash
-    pip install pyinstaller
-    ```
-
-2.  **Gerar o executável:**
-
-    Navegue até o diretório raiz do repositório em seu terminal e execute:
-
-    ```bash
-    pyinstaller --onefile --windowed gerenciar_entregas.py
-    ```
-
-    O executável será criado no diretório `dist/`.
-
-Certifique-se de ter instalado previamente todas as dependências listadas em `requirements.txt` para que a criação do executável ocorra sem erros.
-
------
