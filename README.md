@@ -184,7 +184,7 @@ Este comando fará o download e instalará todos os pacotes listados.
 Após tudo o que foi feito, podemos rodar nossa aplicação para tanto, para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
 
 ```bash
-python gerenciar_entregas.py
+python main.py
 ```
 
 Uma interface gráfica irá guiá-lo na seleção do projeto, escolha de arquivos e atualização da planilha GRD.
