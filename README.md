@@ -172,17 +172,7 @@ pip install -r requirements.txt
 
 Este comando fará o download e instalará todos os pacotes listados.
 
-## 3\. Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
-
-Após tudo o que foi feito, podemos rodar nossa aplicação para tanto, para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
-
-```bash
-python gerenciar_entregas.py
-```
-
-Uma interface gráfica irá guiá-lo na seleção do projeto, escolha de arquivos e atualização da planilha GRD.
-
-## 4\. Configurando Variáveis de Ambiente (Configuring Environment Variables)
+## 3\. Configurando Variáveis de Ambiente (Configuring Environment Variables)
 
 Os locais padrão para os arquivos JSON usados pelo aplicativo podem ser substituídos usando variáveis de ambiente. Essas variáveis especificam os caminhos para os arquivos de configuração que o script usa.
 
@@ -220,7 +210,7 @@ ARQ_ULTIMO_DIR = _resolve_json_path(
     r"G:\Drives compartilhados\OAE-JSONS\ultimo_diretorio_arqs.json",
 )
 ```
-## 5\. Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
+## 4\. Rodando o Aplicativo Principal (Interface Tkinter) (Running the Main Application (Tkinter Interface))
 
 Após tudo o que foi feito, podemos rodar nossa aplicação para tanto, para executar o script principal, certifique-se de que seu ambiente virtual esteja ativado e todas as dependências instaladas. Em seguida, a partir do diretório raiz do repositório:
 
