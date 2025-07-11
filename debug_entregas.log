@@ -27,7 +27,7 @@
 06/06/2025 18:27:42 [DEBUG] Criada nova entrega: G:\Drives compartilhados\OAE-991 - PETER BAL\3 Desenvolvimento\SCO\1.ENTREGAS\PE\2.PE - Entrega-4
 06/06/2025 18:27:42 [INFO] Renomeada 2.PE - Entrega-3 ➜ 2.PE - Entrega-3-OBSOLETO
 06/06/2025 18:27:42 [ERROR] Falha ao gerar GRD.xlsx
-Traceback (most recent call last):
+Traceback (most recent call last): 
   File "g:\Drives compartilhados\OAE - SCRIPTS\SCRIPTS\tmp_joaoG\Melhorias\Código_reformulado_teste\OAE_ENG\ui\telas.py", line 171, in processar_entrega_arquivos_tipo
     criar_arquivo_controle(pasta_entregas)
     ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^

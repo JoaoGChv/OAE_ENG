@@ -151,7 +151,7 @@
                 ],
                 "valor_padrao": "TER",
                 "separador": "-"
-            },
+            }, 
             {
                 "ordem": "12",
                 "nome": "SUBSISTEMA",
