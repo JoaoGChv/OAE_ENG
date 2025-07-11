@@ -601,7 +601,7 @@ def exibir_interface_tabela(
 ): 
     exibir_win = tk.Toplevel(master)
     exibir_win.title(f"Gerenciador de Projetos - Projeto {numero}")
-    exibir_win.geometry("1200x800")
+    exibir_win.geometry("1200x800") 
 
     fpr = tk.Frame(exibir_win)
     fpr.pack(fill=tk.BOTH, expand=True)

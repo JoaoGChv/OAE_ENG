@@ -14,7 +14,7 @@
       "tipo": "mapeado_dinamico",
       "valores_permitidos": ["411", "429", "467"], 
       "obrigatorio": true,
-      "descricao": "Número do projeto (poderá ser ampliado depois)."
+      "descricao": "Número do projeto (poderá ser ampliado depois)." 
     },
     "Organização": {
       "tipo": "fixo",

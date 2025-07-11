@@ -8,5 +8,5 @@ def test_listar_arquivos_no_diretorio():
 
 def test_carregar_nomenclatura_json():
     nomenclatura = carregar_nomenclatura_json("123", "nomenclaturas.json")
-    assert nomenclatura is not None
+    assert nomenclatura is not None 
  

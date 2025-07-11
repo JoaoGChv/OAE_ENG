@@ -18,4 +18,4 @@ def salvar_dados(caminho, dados):
         with open(caminho, 'w', encoding='utf-8') as f:
             json.dump(dados, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        print(f"Erro ao salvar dados: {e}")
+        print(f"Erro ao salvar dados: {e}") 

@@ -16,5 +16,5 @@ def main():
         print("Nenhum projeto foi selecionado.")
 
 if __name__ == "__main__":
-    main()   
+    main()    
 

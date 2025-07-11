@@ -22,7 +22,7 @@ def verificar_tokens(tokens, nomenclatura):
     result = []
     for i, token in enumerate(tokens):
         if i < len(tokens_esperados) and tokens_esperados[i] != "livre" and tokens_esperados[i] != token:
-            result.append("mismatch")
+            result.append("mismatch") 
         else:
             result.append("ok")
     return result

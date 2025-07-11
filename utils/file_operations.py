@@ -19,7 +19,7 @@ def listar_arquivos_no_diretorio(diretorio):
             tam = os.path.getsize(cam)
             dmod_ts = os.path.getmtime(cam)
             dmod = datetime.datetime.fromtimestamp(dmod_ts).strftime("%d/%m/%Y %H:%M")
-            saida.append((rv, a, tam, cam, dmod))
+            saida.append((rv, a, tam, cam, dmod)) 
             
     return saida
 
